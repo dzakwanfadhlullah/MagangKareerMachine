@@ -103,6 +103,10 @@ def init_db(db_path: Optional[str] = None) -> None:
             summary TEXT,
             score INTEGER,
             confidence INTEGER,
+            is_internship INTEGER DEFAULT 0,
+            internship_confidence INTEGER DEFAULT 0,
+            role_confidence INTEGER DEFAULT 0,
+            location_area TEXT,
             page_type TEXT DEFAULT 'detail',
             extraction_status TEXT DEFAULT 'extracted',
             rejection_reason TEXT,
@@ -242,11 +246,12 @@ def save_opportunity(opp: dict, db_path: Optional[str] = None) -> bool:
         else:
             conn.execute(
                 """INSERT INTO opportunities
-                (canonical_key, title, company, role, category, location, work_mode,
+                (canonical_key, title, company, role, category, location, location_area, work_mode,
                  duration, salary, deadline, source_url, detail_url, source_name,
                  source_platform, raw_text, summary, score, confidence,
+                 is_internship, internship_confidence, role_confidence,
                  page_type, extraction_status, rejection_reason)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     opp["canonical_key"],
                     opp["title"],
@@ -254,6 +259,7 @@ def save_opportunity(opp: dict, db_path: Optional[str] = None) -> bool:
                     opp.get("role"),
                     opp.get("category"),
                     opp.get("location"),
+                    opp.get("location_area"),
                     opp.get("work_mode"),
                     opp.get("duration"),
                     opp.get("salary"),
@@ -266,6 +272,9 @@ def save_opportunity(opp: dict, db_path: Optional[str] = None) -> bool:
                     opp.get("summary"),
                     opp.get("score", 0),
                     opp.get("confidence", 0),
+                    1 if opp.get("is_internship") else 0,
+                    opp.get("internship_confidence", 0),
+                    opp.get("role_confidence", 0),
                     opp.get("page_type", "detail"),
                     opp.get("extraction_status", "extracted"),
                     opp.get("rejection_reason"),
