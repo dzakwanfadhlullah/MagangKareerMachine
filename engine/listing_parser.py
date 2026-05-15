@@ -28,7 +28,10 @@ LISTING_URL_PATTERNS = [
     r"^/loker/?$",
     r"^/loker/industri",
     r"^/loker/lokasi",
-    r"^/find-jobs",
+    r"^/loker/posisi",
+    r"^/loker/tipe",
+    r"^/loker/populer",
+    r"/find-jobs",
     r"^/job-board",
     r"^/jobs/?$",
     r"^/id/[^/]+-jobs$",           # jobstreet: /id/frontend-developer-internship-jobs
@@ -142,10 +145,14 @@ class DeallsAdapter(PlatformAdapter):
         for a in soup.find_all("a", href=True):
             href = a["href"]
 
-            # Detail link: /loker/{slug}~{company} (bukan /loker saja, /loker/industri, /loker/lokasi)
+            # Detail link: /loker/{slug}~{company}
+            # Reject: /loker saja, /loker/industri, /loker/lokasi, /loker/posisi, /loker/tipe, /loker/populer
             if not re.match(r"^/loker/[a-z0-9]", href):
                 continue
-            if re.match(r"^/loker/(industri|lokasi|kategori)", href):
+            if re.match(r"^/loker/(industri|lokasi|kategori|posisi|tipe|populer)", href):
+                continue
+            # Detail links Dealls mengandung ~ sebagai separator slug~company
+            if "~" not in href:
                 continue
 
             full_url = urljoin("https://dealls.com", href)
