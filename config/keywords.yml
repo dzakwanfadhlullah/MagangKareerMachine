@@ -13,17 +13,21 @@ role_keywords:
     - react
     - next.js
     - vue
+    - angular
     - ui engineer
+    - ui developer
 
   backend:
     - backend
     - back-end
     - back end
-    - api
     - node.js
     - fastapi
     - spring boot
     - golang
+    - django
+    - laravel
+    - express.js
 
   fullstack:
     - fullstack
@@ -31,26 +35,26 @@ role_keywords:
     - full stack
 
   mobile:
-    - mobile
-    - android
-    - ios
+    - mobile developer
+    - android developer
+    - ios developer
     - flutter
-    - kotlin
     - react native
+    - kotlin developer
+    - swift developer
 
   data_analyst:
     - data analyst
-    - analytics
-    - dashboard
-    - sql
-    - excel
+    - data analytics
+    - business analyst
+    - bi analyst
     - power bi
     - tableau
 
   data_engineer:
     - data engineer
-    - etl
-    - pipeline
+    - data engineering
+    - etl engineer
     - data warehouse
     - bigquery
 
@@ -58,17 +62,15 @@ role_keywords:
     - ai engineer
     - machine learning
     - ml engineer
-    - llm
+    - deep learning
     - computer vision
-    - nlp
+    - nlp engineer
 
   actuarial:
     - actuarial
     - actuary
     - aktuaria
-    - pricing
-    - valuation
-    - reserving
+    - reserving analyst
     - insurance liability
 
 locations:
