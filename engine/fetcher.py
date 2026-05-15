@@ -1,7 +1,13 @@
-"""Fetcher — ambil dan ekstrak teks dari halaman web publik."""
+"""Fetcher — ambil dan ekstrak teks dari halaman web publik.
+
+Optimisasi:
+- Concurrent fetching via ThreadPoolExecutor
+- Skip trafilatura untuk platform known (pakai BS4 langsung)
+- Configurable timeout dan workers
+"""
 
 import os
-import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 from urllib.parse import urlparse
 
@@ -13,9 +19,12 @@ from engine.listing_parser import classify_page, detect_platform
 
 console = Console()
 
-FETCH_TIMEOUT = int(os.getenv("FETCH_TIMEOUT", "15"))
+DEFAULT_TIMEOUT = int(os.getenv("FETCH_TIMEOUT", "10"))
+DEFAULT_WORKERS = int(os.getenv("FETCH_WORKERS", "5"))
 
-# User-Agent agar tidak di-block
+# Platform yang HTML-nya bisa langsung di-parse BS4 tanpa trafilatura
+KNOWN_PLATFORMS = {"dealls", "glints", "kalibrr", "jobstreet"}
+
 HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -26,202 +35,210 @@ HEADERS = {
     "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7",
 }
 
-# Ekstensi file binary yang harus di-skip
 BINARY_EXTENSIONS = {".pdf", ".doc", ".docx", ".xls", ".xlsx", ".zip", ".rar", ".png", ".jpg", ".jpeg", ".gif", ".mp4"}
-
-# Kata kunci halaman yang harus di-skip
 SKIP_SIGNALS = ["captcha", "recaptcha", "verify you are human", "access denied"]
 LOGIN_SIGNALS = ["login", "sign in", "log in", "masuk"]
 
 
 def is_binary_url(url: str) -> bool:
-    """Cek apakah URL mengarah ke file binary."""
     path = urlparse(url).path.lower()
     return any(path.endswith(ext) for ext in BINARY_EXTENSIONS)
 
 
 def is_bad_page(title: str, text: str, status_code: int) -> tuple[bool, str]:
-    """
-    Cek apakah halaman tidak layak diproses.
-    Return (is_bad, reason).
-    """
     text_lower = text.lower()
     title_lower = (title or "").lower()
 
-    # Status code buruk
     if status_code in [401, 403, 429]:
         return True, f"HTTP {status_code}"
-
-    # CAPTCHA
     for signal in SKIP_SIGNALS:
         if signal in text_lower:
             return True, f"Skip signal: {signal}"
-
-    # Login page dengan konten pendek
     for signal in LOGIN_SIGNALS:
         if signal in title_lower and len(text) < 1000:
             return True, f"Login page: {signal}"
-
-    # Konten terlalu pendek
     if len(text.strip()) < 200:
         return True, "Content too short"
-
     return False, ""
 
 
-def extract_text_trafilatura(html: str, url: str) -> Optional[str]:
-    """Ekstrak teks bersih dari HTML menggunakan trafilatura."""
-    try:
-        import trafilatura
-        text = trafilatura.extract(html, url=url, include_comments=False, include_tables=True)
-        return text
-    except Exception:
-        return None
-
-
 def extract_text_bs4(html: str) -> Optional[str]:
-    """Fallback: ekstrak teks dari HTML menggunakan BeautifulSoup."""
+    """Ekstrak teks dari HTML menggunakan BeautifulSoup (cepat)."""
     try:
         from bs4 import BeautifulSoup
         soup = BeautifulSoup(html, "html.parser")
-
-        # Hapus script dan style
         for tag in soup(["script", "style", "nav", "footer", "header"]):
             tag.decompose()
-
         text = soup.get_text(separator="\n", strip=True)
-
-        # Bersihkan whitespace berlebih
         lines = [line.strip() for line in text.splitlines() if line.strip()]
         return "\n".join(lines)
     except Exception:
         return None
 
 
+def extract_text_trafilatura(html: str, url: str) -> Optional[str]:
+    """Ekstrak teks bersih — hanya untuk generic/unknown platforms."""
+    try:
+        import trafilatura
+        return trafilatura.extract(html, url=url, include_comments=False, include_tables=True)
+    except Exception:
+        return None
+
+
 def extract_title_bs4(html: str) -> Optional[str]:
-    """Ekstrak title dari HTML."""
     try:
         from bs4 import BeautifulSoup
         soup = BeautifulSoup(html, "html.parser")
         title_tag = soup.find("title")
         if title_tag:
             return title_tag.get_text(strip=True)
-
         h1_tag = soup.find("h1")
         if h1_tag:
             return h1_tag.get_text(strip=True)
-
         return None
     except Exception:
         return None
 
 
-def fetch_page(url: str) -> Optional[RawPage]:
+def fetch_page(url: str, timeout: int = DEFAULT_TIMEOUT) -> Optional[RawPage]:
     """
-    Fetch satu halaman web dan ekstrak teks bersih.
-    Menyimpan raw HTML juga agar listing_parser bisa parse links.
+    Fetch satu halaman web.
+    Known platforms: langsung BS4 (cepat).
+    Unknown platforms: trafilatura fallback (thorough).
     """
-    # Skip binary URLs
     if is_binary_url(url):
-        console.print(f"  [dim]Skip binary: {url}[/dim]")
         return None
 
     try:
-        response = requests.get(url, headers=HEADERS, timeout=FETCH_TIMEOUT, allow_redirects=True)
+        response = requests.get(url, headers=HEADERS, timeout=timeout, allow_redirects=True)
 
-        # Cek content type
         content_type = response.headers.get("Content-Type", "")
         if "text/html" not in content_type and "application/xhtml" not in content_type:
-            console.print(f"  [dim]Skip non-HTML: {url}[/dim]")
             return None
 
         html = response.text
         status_code = response.status_code
-
-        # Ekstrak title
         title = extract_title_bs4(html)
+        platform = detect_platform(url)
 
-        # Ekstrak teks: trafilatura first, fallback ke bs4
-        text = extract_text_trafilatura(html, url)
-        if not text:
+        # Known platforms: BS4 saja (cepat, 3-5x lebih cepat dari trafilatura)
+        if platform in KNOWN_PLATFORMS:
             text = extract_text_bs4(html)
+        else:
+            # Generic: trafilatura first, fallback BS4
+            text = extract_text_trafilatura(html, url)
+            if not text:
+                text = extract_text_bs4(html)
+
         if not text:
             text = ""
 
-        # Validasi halaman
         is_bad, reason = is_bad_page(title or "", text, status_code)
         if is_bad:
-            console.print(f"  [dim]Skip ({reason}): {url}[/dim]")
             return None
 
-        # Klasifikasi page type
         page_type = classify_page(url, title or "")
-        platform = detect_platform(url)
 
         return RawPage(
             url=url,
             title=title,
             text_content=text[:50000],
-            html_content=html,  # Raw HTML untuk listing parser
+            html_content=html,
             status_code=status_code,
             page_type=page_type,
             source_platform=platform,
         )
 
     except requests.Timeout:
-        console.print(f"  [yellow]Timeout: {url}[/yellow]")
         return None
-    except requests.RequestException as e:
-        console.print(f"  [red]Fetch error: {url} - {e}[/red]")
+    except requests.RequestException:
         return None
 
 
-def fetch_all(results: list[RawSearchResult], existing_urls: Optional[set[str]] = None) -> list[RawPage]:
-    """
-    Fetch semua URL dari search results.
-    Skip URL yang sudah pernah di-fetch.
-    """
+def fetch_all(
+    results: list[RawSearchResult],
+    existing_urls: Optional[set[str]] = None,
+    workers: int = DEFAULT_WORKERS,
+    timeout: int = DEFAULT_TIMEOUT,
+) -> list[RawPage]:
+    """Fetch semua URL — concurrent dengan ThreadPoolExecutor."""
     existing = existing_urls or set()
+    urls_to_fetch = []
+
+    for result in results:
+        if result.url not in existing:
+            urls_to_fetch.append(result.url)
+
+    if not urls_to_fetch:
+        console.print(f"[green][OK][/green] All {len(results)} URLs already fetched")
+        return []
+
+    total = len(urls_to_fetch)
+    console.print(f"  Fetching {total} pages with {workers} workers...")
+
     pages = []
-    total = len(results)
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        future_map = {
+            executor.submit(fetch_page, url, timeout): url
+            for url in urls_to_fetch
+        }
 
-    for i, result in enumerate(results, 1):
-        # Skip jika sudah pernah di-fetch
-        if result.url in existing:
-            console.print(f"  [dim]({i}/{total}) Already fetched: {result.url}[/dim]")
-            continue
+        done_count = 0
+        for future in as_completed(future_map):
+            done_count += 1
+            url = future_map[future]
+            try:
+                page = future.result()
+                if page:
+                    pages.append(page)
+            except Exception:
+                pass
 
-        console.print(f"  [cyan]({i}/{total})[/cyan] Fetching: {result.url}")
-        page = fetch_page(result.url)
-
-        if page:
-            pages.append(page)
+            if done_count % 10 == 0 or done_count == total:
+                console.print(f"  [dim]Progress: {done_count}/{total} done, {len(pages)} OK[/dim]")
 
     console.print(f"[green][OK][/green] Fetched {len(pages)} pages from {total} URLs")
     return pages
 
 
-def fetch_detail_urls(urls: list[str], existing_urls: Optional[set[str]] = None) -> list[RawPage]:
-    """
-    Fetch daftar detail URLs (dari crawl queue).
-    Return RawPage dengan page_type='detail'.
-    """
+def fetch_detail_urls(
+    urls: list[str],
+    existing_urls: Optional[set[str]] = None,
+    workers: int = DEFAULT_WORKERS,
+    timeout: int = DEFAULT_TIMEOUT,
+) -> list[RawPage]:
+    """Fetch detail URLs — concurrent, force page_type=detail."""
     existing = existing_urls or set()
+    to_fetch = [u for u in urls if u not in existing]
+
+    if not to_fetch:
+        console.print(f"[green][OK][/green] All {len(urls)} detail URLs already fetched")
+        return []
+
+    total = len(to_fetch)
+    console.print(f"  Fetching {total} detail pages with {workers} workers...")
+
     pages = []
-    total = len(urls)
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        future_map = {
+            executor.submit(fetch_page, url, timeout): url
+            for url in to_fetch
+        }
 
-    for i, url in enumerate(urls, 1):
-        if url in existing:
-            console.print(f"  [dim]({i}/{total}) Already fetched: {url}[/dim]")
-            continue
+        done_count = 0
+        for future in as_completed(future_map):
+            done_count += 1
+            url = future_map[future]
+            try:
+                page = future.result()
+                if page:
+                    page.page_type = "detail"
+                    pages.append(page)
+            except Exception:
+                pass
 
-        console.print(f"  [cyan]({i}/{total})[/cyan] Fetching detail: {url}")
-        page = fetch_page(url)
-
-        if page:
-            # Override page_type ke detail karena berasal dari crawl queue
-            page.page_type = "detail"
-            pages.append(page)
+            if done_count % 10 == 0 or done_count == total:
+                console.print(f"  [dim]Progress: {done_count}/{total} done, {len(pages)} OK[/dim]")
 
     console.print(f"[green][OK][/green] Fetched {len(pages)} detail pages from {total} URLs")
     return pages

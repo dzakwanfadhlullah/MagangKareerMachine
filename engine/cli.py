@@ -14,7 +14,7 @@ from engine.reporter import generate_report
 console = Console()
 app = typer.Typer(
     name="magangkareer",
-    help="🎯 MagangKareer Engine — mesin pencari peluang magang.",
+    help="MagangKareer Engine -- mesin pencari peluang magang.",
     add_completion=False,
 )
 
@@ -24,42 +24,67 @@ def init():
     """Buat database dan folder yang dibutuhkan."""
     console.print("[bold]Initializing MagangKareer Engine...[/bold]")
     init_db()
-    console.print("[green]✅ Ready![/green]")
+    console.print("[green]Ready![/green]")
 
 
 @app.command()
 def search(
-    query: str = typer.Option(..., "--query", "-q", help="Keyword pencarian (e.g., 'frontend intern')"),
+    query: str = typer.Option(..., "--query", "-q", help="Keyword pencarian"),
     location: str = typer.Option("Indonesia", "--location", "-l", help="Lokasi target"),
     limit: int = typer.Option(20, "--limit", help="Max results per query"),
-    min_score: int = typer.Option(40, "--min-score", help="Minimum score untuk disimpan"),
+    min_score: int = typer.Option(40, "--min-score", help="Minimum score"),
+    max_per_source: int = typer.Option(10, "--max-per-source", help="Max detail links per platform"),
+    max_total_detail: int = typer.Option(30, "--max-total-detail", help="Max total detail pages"),
+    workers: int = typer.Option(5, "--workers", help="Concurrent fetch workers (1-8)"),
+    timeout: int = typer.Option(10, "--timeout", help="Fetch timeout per page (seconds)"),
+    query_limit: int = typer.Option(3, "--query-limit", help="Max search queries"),
 ):
     """Jalankan pipeline pencarian lengkap."""
+    workers = min(workers, 8)
     init_db()
-    run_search_pipeline(query, location, limit, min_score)
+    run_search_pipeline(
+        query, location, limit, min_score,
+        max_per_source=max_per_source,
+        max_total_detail=max_total_detail,
+        workers=workers,
+        timeout=timeout,
+        query_limit=query_limit,
+    )
 
 
 @app.command(name="crawl-sources")
 def crawl_sources(
-    min_score: int = typer.Option(40, "--min-score", help="Minimum score untuk disimpan"),
+    min_score: int = typer.Option(40, "--min-score", help="Minimum score"),
+    max_sources: int = typer.Option(7, "--max-sources", help="Max listing sources to crawl"),
+    max_per_source: int = typer.Option(10, "--max-per-source", help="Max detail links per platform"),
+    max_total_detail: int = typer.Option(30, "--max-total-detail", help="Max total detail pages"),
+    workers: int = typer.Option(5, "--workers", help="Concurrent fetch workers (1-8)"),
+    timeout: int = typer.Option(10, "--timeout", help="Fetch timeout per page (seconds)"),
 ):
     """Crawl dari manual sources di config/sources.yml."""
+    workers = min(workers, 8)
     init_db()
-    run_crawl_sources(min_score)
+    run_crawl_sources(
+        min_score=min_score,
+        max_sources=max_sources,
+        max_per_source=max_per_source,
+        max_total_detail=max_total_detail,
+        workers=workers,
+        timeout=timeout,
+    )
 
 
 @app.command(name="list")
 def list_opportunities(
-    limit: int = typer.Option(20, "--limit", "-n", help="Jumlah result yang ditampilkan"),
+    limit: int = typer.Option(20, "--limit", "-n", help="Jumlah result"),
 ):
     """Tampilkan top opportunities di terminal."""
     opportunities = get_all_opportunities()
-
     if not opportunities:
         console.print("[yellow]Belum ada data. Jalankan 'search' atau 'crawl-sources' dulu.[/yellow]")
         return
 
-    table = Table(title="🎯 Top Opportunities", show_lines=False)
+    table = Table(title="Top Opportunities", show_lines=False)
     table.add_column("Score", style="bold", width=6, justify="center")
     table.add_column("Title", style="cyan", max_width=50)
     table.add_column("Company", max_width=25)
@@ -78,11 +103,11 @@ def list_opportunities(
 
         table.add_row(
             f"[{score_style}]{score}[/{score_style}]",
-            (opp.get("title") or "—")[:50],
-            (opp.get("company") or "—")[:25],
-            (opp.get("role") or "—")[:20],
-            (opp.get("location") or "—")[:15],
-            (opp.get("source_name") or "—")[:20],
+            (opp.get("title") or "-")[:50],
+            (opp.get("company") or "-")[:25],
+            (opp.get("role") or "-")[:20],
+            (opp.get("location") or "-")[:15],
+            (opp.get("source_name") or "-")[:20],
         )
 
     console.print(table)
@@ -94,7 +119,7 @@ def export():
     """Ekspor data ke CSV dan JSON."""
     count = get_opportunity_count()
     if count == 0:
-        console.print("[yellow]Belum ada data untuk diekspor.[/yellow]")
+        console.print("[yellow]Belum ada data.[/yellow]")
         return
     export_all()
 
@@ -104,7 +129,7 @@ def report():
     """Generate HTML report."""
     count = get_opportunity_count()
     if count == 0:
-        console.print("[yellow]Belum ada data untuk report.[/yellow]")
+        console.print("[yellow]Belum ada data.[/yellow]")
         return
     generate_report()
 
@@ -122,10 +147,9 @@ def reset():
 
 @app.command(name="validate-results")
 def validate_results():
-    """Quality gate — validasi data di database dan export."""
+    """Quality gate -- validasi data di database."""
     import re
-    import json
-    from engine.listing_parser import is_listing_url, is_listing_title, LISTING_URL_PATTERNS
+    from engine.listing_parser import is_listing_url
 
     console.rule("[bold cyan]Quality Gate: Validate Results[/bold cyan]")
 
@@ -147,15 +171,9 @@ def validate_results():
 
     # Check 2: Bad titles
     bad_title_patterns = [
-        r"explore jobs",
-        r"lowongan kerja populer",
-        r"lowongan kerja full.?time",
-        r"lowongan kerja magang",
-        r"lowongan kerja di indonesia",
-        r"job vacancy.*opportunit",
-        r"cari lowongan",
-        r"browse jobs",
-        r"find jobs",
+        r"explore jobs", r"lowongan kerja populer", r"lowongan kerja full.?time",
+        r"lowongan kerja magang", r"lowongan kerja di indonesia",
+        r"job vacancy.*opportunit", r"cari lowongan", r"browse jobs", r"find jobs",
     ]
     bad_titles = []
     for opp in opportunities:
@@ -166,7 +184,7 @@ def validate_results():
                 issues.append(f"[BAD TITLE] {opp.get('title')}")
                 break
 
-    # Check 3: Non-internship (title check)
+    # Check 3: Non-internship
     intern_signals = ["intern", "internship", "magang", "trainee", "apprentice"]
     non_intern = []
     for opp in opportunities:
@@ -182,14 +200,7 @@ def validate_results():
     for opp in opportunities:
         sal = opp.get("salary") or ""
         if sal:
-            # Reject: terlalu pendek, hanya huruf, angka gabungan aneh
-            if len(sal) < 4:
-                invalid_salary.append(sal)
-                issues.append(f"[BAD SALARY] {sal}")
-            elif re.match(r"^[A-Z]+,?$", sal, re.IGNORECASE):
-                invalid_salary.append(sal)
-                issues.append(f"[BAD SALARY] {sal}")
-            elif len(re.findall(r"\d", sal)) > 15:
+            if len(sal) < 4 or re.match(r"^[A-Z]+,?$", sal, re.IGNORECASE) or len(re.findall(r"\d", sal)) > 15:
                 invalid_salary.append(sal)
                 issues.append(f"[BAD SALARY] {sal}")
 
@@ -199,32 +210,29 @@ def validate_results():
         dur = opp.get("duration") or ""
         if dur:
             match = re.search(r"(\d+)", dur)
-            if match:
-                num = int(match.group(1))
-                if num > 24:
-                    invalid_duration.append(dur)
-                    issues.append(f"[BAD DURATION] {dur}")
+            if match and int(match.group(1)) > 24:
+                invalid_duration.append(dur)
+                issues.append(f"[BAD DURATION] {dur}")
 
     # Check 6: Page type
     non_detail = [o for o in opportunities if o.get("page_type") != "detail"]
     for opp in non_detail:
-        issues.append(f"[NON-DETAIL] page_type={opp.get('page_type')} | {opp.get('title')}")
+        issues.append(f"[NON-DETAIL] {opp.get('title')}")
 
-    # --- Print Report ---
+    # --- Report ---
     console.print(f"\n[bold]Total opportunities:[/bold] {total}")
-    console.print(f"  Listing URLs: [{'red' if listing_urls else 'green'}]{len(listing_urls)}[/]")
-    console.print(f"  Bad titles: [{'red' if bad_titles else 'green'}]{len(bad_titles)}[/]")
-    console.print(f"  Non-internship: [{'red' if non_intern else 'green'}]{len(non_intern)}[/]")
-    console.print(f"  Invalid salary: [{'red' if invalid_salary else 'green'}]{len(invalid_salary)}[/]")
-    console.print(f"  Invalid duration: [{'red' if invalid_duration else 'green'}]{len(invalid_duration)}[/]")
-    console.print(f"  Non-detail pages: [{'red' if non_detail else 'green'}]{len(non_detail)}[/]")
+    console.print(f"  Listing URLs:    [{'red' if listing_urls else 'green'}]{len(listing_urls)}[/]")
+    console.print(f"  Bad titles:      [{'red' if bad_titles else 'green'}]{len(bad_titles)}[/]")
+    console.print(f"  Non-internship:  [{'red' if non_intern else 'green'}]{len(non_intern)}[/]")
+    console.print(f"  Invalid salary:  [{'red' if invalid_salary else 'green'}]{len(invalid_salary)}[/]")
+    console.print(f"  Invalid duration:[{'red' if invalid_duration else 'green'}]{len(invalid_duration)}[/]")
+    console.print(f"  Non-detail:      [{'red' if non_detail else 'green'}]{len(non_detail)}[/]")
 
     if issues:
-        console.print(f"\n[red][FAIL][/red] {len(issues)} quality issues found:")
+        console.print(f"\n[red][FAIL][/red] {len(issues)} issues:")
         for issue in issues[:20]:
             console.print(f"  {issue}")
         if len(issues) > 20:
             console.print(f"  ... and {len(issues) - 20} more")
     else:
         console.print(f"\n[green][PASS][/green] All {total} opportunities passed quality gate!")
-
