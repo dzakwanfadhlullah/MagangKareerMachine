@@ -9,6 +9,7 @@ import requests
 from rich.console import Console
 
 from engine.models import RawSearchResult, RawPage
+from engine.listing_parser import classify_page, detect_platform
 
 console = Console()
 
@@ -118,13 +119,7 @@ def extract_title_bs4(html: str) -> Optional[str]:
 def fetch_page(url: str) -> Optional[RawPage]:
     """
     Fetch satu halaman web dan ekstrak teks bersih.
-
-    Strategi:
-    1. Skip URL binary
-    2. HTTP GET dengan requests
-    3. Ekstrak teks dengan trafilatura
-    4. Fallback ke BeautifulSoup
-    5. Validasi halaman (skip captcha, login, dll)
+    Menyimpan raw HTML juga agar listing_parser bisa parse links.
     """
     # Skip binary URLs
     if is_binary_url(url):
@@ -159,18 +154,25 @@ def fetch_page(url: str) -> Optional[RawPage]:
             console.print(f"  [dim]Skip ({reason}): {url}[/dim]")
             return None
 
+        # Klasifikasi page type
+        page_type = classify_page(url, title or "")
+        platform = detect_platform(url)
+
         return RawPage(
             url=url,
             title=title,
-            text_content=text[:50000],  # Limit teks agar tidak terlalu besar
+            text_content=text[:50000],
+            html_content=html,  # Raw HTML untuk listing parser
             status_code=status_code,
+            page_type=page_type,
+            source_platform=platform,
         )
 
     except requests.Timeout:
         console.print(f"  [yellow]Timeout: {url}[/yellow]")
         return None
     except requests.RequestException as e:
-        console.print(f"  [red]Fetch error: {url} — {e}[/red]")
+        console.print(f"  [red]Fetch error: {url} - {e}[/red]")
         return None
 
 
@@ -196,4 +198,30 @@ def fetch_all(results: list[RawSearchResult], existing_urls: Optional[set[str]] 
             pages.append(page)
 
     console.print(f"[green][OK][/green] Fetched {len(pages)} pages from {total} URLs")
+    return pages
+
+
+def fetch_detail_urls(urls: list[str], existing_urls: Optional[set[str]] = None) -> list[RawPage]:
+    """
+    Fetch daftar detail URLs (dari crawl queue).
+    Return RawPage dengan page_type='detail'.
+    """
+    existing = existing_urls or set()
+    pages = []
+    total = len(urls)
+
+    for i, url in enumerate(urls, 1):
+        if url in existing:
+            console.print(f"  [dim]({i}/{total}) Already fetched: {url}[/dim]")
+            continue
+
+        console.print(f"  [cyan]({i}/{total})[/cyan] Fetching detail: {url}")
+        page = fetch_page(url)
+
+        if page:
+            # Override page_type ke detail karena berasal dari crawl queue
+            page.page_type = "detail"
+            pages.append(page)
+
+    console.print(f"[green][OK][/green] Fetched {len(pages)} detail pages from {total} URLs")
     return pages

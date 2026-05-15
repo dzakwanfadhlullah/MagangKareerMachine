@@ -241,14 +241,29 @@ def get_source_name(url: str) -> str:
 
 def extract_opportunity(page: RawPage, config_path: Optional[Path] = None) -> Optional[Opportunity]:
     """
-    Ekstrak metadata lowongan dari satu halaman.
+    Ekstrak metadata lowongan dari satu halaman DETAIL.
 
+    TIDAK memproses halaman listing/search.
     Return Opportunity jika halaman berisi lowongan magang.
-    Return None jika tidak relevan.
+    Return None jika listing page atau tidak relevan.
     """
+    from engine.listing_parser import classify_page, is_listing_title, detect_platform
+
+    title = page.title or ""
+
+    # REJECT: halaman listing — jangan pernah jadi opportunity
+    page_type = page.page_type if page.page_type != "unknown" else classify_page(page.url, title)
+    if page_type == "listing":
+        console.print(f"  [dim]Reject listing page: {page.url}[/dim]")
+        return None
+
+    # REJECT: title listing
+    if is_listing_title(title):
+        console.print(f"  [dim]Reject listing title: {title}[/dim]")
+        return None
+
     config = load_keywords(config_path)
     text = page.text_content
-    title = page.title or ""
 
     # Deteksi internship
     is_internship, confidence = detect_internship(text, config)
@@ -266,10 +281,11 @@ def extract_opportunity(page: RawPage, config_path: Optional[Path] = None) -> Op
     company = detect_company(text, title)
     summary = generate_summary(text)
     source_name = get_source_name(page.url)
+    platform = page.source_platform or detect_platform(page.url)
 
     # Gunakan title dari page, bersihkan
     opp_title = title if title else "Untitled Opportunity"
-    opp_title = opp_title[:200]  # Limit panjang
+    opp_title = opp_title[:200]
 
     return Opportunity(
         title=opp_title,
@@ -282,22 +298,37 @@ def extract_opportunity(page: RawPage, config_path: Optional[Path] = None) -> Op
         salary=salary,
         deadline=deadline,
         source_url=page.url,
+        detail_url=page.url,  # Detail URL = source URL untuk detail pages
         source_name=source_name,
-        raw_text=text[:5000],  # Simpan sebagian teks mentah
+        source_platform=platform,
+        raw_text=text[:5000],
         summary=summary,
         score=0,  # Akan diisi oleh scorer
         confidence=confidence,
+        page_type="detail",
+        extraction_status="extracted",
     )
 
 
 def extract_all(pages: list[RawPage], config_path: Optional[Path] = None) -> list[Opportunity]:
-    """Ekstrak opportunities dari semua halaman."""
+    """
+    Ekstrak opportunities HANYA dari halaman detail.
+    Halaman listing di-skip otomatis.
+    """
     opportunities = []
+    skipped_listing = 0
 
     for page in pages:
+        if page.page_type == "listing":
+            skipped_listing += 1
+            continue
+
         opp = extract_opportunity(page, config_path)
         if opp:
             opportunities.append(opp)
 
+    if skipped_listing > 0:
+        console.print(f"  [dim]Skipped {skipped_listing} listing pages[/dim]")
     console.print(f"[green][OK][/green] Extracted {len(opportunities)} opportunities from {len(pages)} pages")
     return opportunities
+
