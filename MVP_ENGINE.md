@@ -510,5 +510,5 @@ exports/report.html        ← Ringkasan visual
 - **Tidak membangun** dashboard, login, payment, atau fitur premium.
 - **Tidak menggunakan** GPT/OpenAI API atau API berbayar lainnya.
 - Bisa Bypass login wall, CAPTCHA, atau anti-bot.
-- Engine harus berjalan dengan **sumber publik saja**.
+- Engine harus berjalan dengan sumber publik dan private
 - Desain database sudah menyimpan metadata cukup untuk fitur premium di masa depan.
