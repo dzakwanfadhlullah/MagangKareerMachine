@@ -1,0 +1,19 @@
+score:
+  internship_detected: 30
+  role_detected: 25
+  location_detected: 10
+  apply_signal: 10
+  deadline_detected: 10
+  official_career_source: 10
+  remote_bonus: 5
+  paid_signal: 5
+
+penalty:
+  bootcamp: -40
+  course: -35
+  expired: -50
+  not_internship: -100
+
+thresholds:
+  save_minimum: 40
+  premium_minimum: 70

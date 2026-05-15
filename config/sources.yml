@@ -1,0 +1,12 @@
+search:
+  enabled: true
+  max_results_per_query: 20
+
+manual_sources:
+  - https://www.jobstreet.co.id/id/frontend-developer-internship-jobs
+  - https://www.jobstreet.co.id/id/data-analyst-internship-jobs
+  - https://www.jobstreet.co.id/id/software-engineer-internship-jobs
+  - https://glints.com/id/en/find-jobs/loker-front-end-developer-internship
+  - https://glints.com/id/en/find-jobs/loker-data-analyst-internship
+  - https://dealls.com/loker
+  - https://www.kalibrr.id/id-ID/job-board

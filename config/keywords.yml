@@ -1,0 +1,97 @@
+internship_terms:
+  - intern
+  - internship
+  - magang
+  - trainee
+  - apprentice
+
+role_keywords:
+  frontend:
+    - frontend
+    - front-end
+    - front end
+    - react
+    - next.js
+    - vue
+    - ui engineer
+
+  backend:
+    - backend
+    - back-end
+    - back end
+    - api
+    - node.js
+    - fastapi
+    - spring boot
+    - golang
+
+  fullstack:
+    - fullstack
+    - full-stack
+    - full stack
+
+  mobile:
+    - mobile
+    - android
+    - ios
+    - flutter
+    - kotlin
+    - react native
+
+  data_analyst:
+    - data analyst
+    - analytics
+    - dashboard
+    - sql
+    - excel
+    - power bi
+    - tableau
+
+  data_engineer:
+    - data engineer
+    - etl
+    - pipeline
+    - data warehouse
+    - bigquery
+
+  ai_ml:
+    - ai engineer
+    - machine learning
+    - ml engineer
+    - llm
+    - computer vision
+    - nlp
+
+  actuarial:
+    - actuarial
+    - actuary
+    - aktuaria
+    - pricing
+    - valuation
+    - reserving
+    - insurance liability
+
+locations:
+  - Indonesia
+  - Jakarta
+  - Bandung
+  - Tangerang
+  - Remote
+  - Hybrid
+  - Surabaya
+  - Yogyakarta
+  - Bekasi
+  - Depok
+  - Bogor
+  - Semarang
+  - Malang
+  - Medan
+
+negative_terms:
+  - bootcamp
+  - course
+  - kelas
+  - training berbayar
+  - paid class
+  - webinar
+  - seminar
