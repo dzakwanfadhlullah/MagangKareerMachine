@@ -1,0 +1,258 @@
+"""Database module — SQLite CRUD untuk MagangKareer Engine."""
+
+import sqlite3
+import os
+from pathlib import Path
+from typing import Optional
+
+from rich.console import Console
+
+console = Console()
+
+DEFAULT_DB_PATH = "data/magangkareer.db"
+
+
+def get_db_path() -> str:
+    """Ambil path database dari env atau default."""
+    return os.getenv("DB_PATH", DEFAULT_DB_PATH)
+
+
+def get_connection(db_path: Optional[str] = None) -> sqlite3.Connection:
+    """Buat koneksi SQLite."""
+    path = db_path or get_db_path()
+    conn = sqlite3.connect(path)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    return conn
+
+
+def init_db(db_path: Optional[str] = None) -> None:
+    """Buat database dan semua tabel yang dibutuhkan."""
+    path = db_path or get_db_path()
+
+    # Buat folder jika belum ada
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    Path("exports").mkdir(parents=True, exist_ok=True)
+
+    conn = get_connection(path)
+    cursor = conn.cursor()
+
+    # Tabel raw_results — hasil pencarian mentah
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS raw_results (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            query TEXT,
+            title TEXT,
+            snippet TEXT,
+            url TEXT UNIQUE,
+            source TEXT,
+            discovered_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Tabel raw_pages — konten halaman yang sudah di-fetch
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS raw_pages (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            url TEXT UNIQUE,
+            title TEXT,
+            text_content TEXT,
+            status_code INTEGER,
+            fetched_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Tabel opportunities — lowongan final
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS opportunities (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            canonical_key TEXT UNIQUE,
+            title TEXT,
+            company TEXT,
+            role TEXT,
+            category TEXT,
+            location TEXT,
+            work_mode TEXT,
+            duration TEXT,
+            salary TEXT,
+            deadline TEXT,
+            source_url TEXT,
+            source_name TEXT,
+            raw_text TEXT,
+            summary TEXT,
+            score INTEGER,
+            confidence INTEGER,
+            status TEXT DEFAULT 'new',
+            first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+            last_seen DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # FTS5 untuk full-text search lokal
+    cursor.execute("""
+        CREATE VIRTUAL TABLE IF NOT EXISTS opportunities_fts
+        USING fts5(
+            title,
+            company,
+            role,
+            category,
+            location,
+            raw_text,
+            content='opportunities',
+            content_rowid='id'
+        )
+    """)
+
+    conn.commit()
+    conn.close()
+    console.print("[green][OK][/green] Database initialized")
+
+
+# --- CRUD Operations ---
+
+
+def save_raw_results(results: list[dict], db_path: Optional[str] = None) -> int:
+    """Simpan raw search results ke database. Return jumlah yang disimpan."""
+    conn = get_connection(db_path)
+    saved = 0
+    for r in results:
+        try:
+            conn.execute(
+                "INSERT OR IGNORE INTO raw_results (query, title, snippet, url, source) VALUES (?, ?, ?, ?, ?)",
+                (r["query"], r["title"], r.get("snippet"), r["url"], r.get("source", "web")),
+            )
+            saved += conn.total_changes
+        except sqlite3.IntegrityError:
+            pass
+    conn.commit()
+    conn.close()
+    return saved
+
+
+def save_raw_page(page: dict, db_path: Optional[str] = None) -> bool:
+    """Simpan raw page ke database. Return True jika berhasil."""
+    conn = get_connection(db_path)
+    try:
+        conn.execute(
+            "INSERT OR IGNORE INTO raw_pages (url, title, text_content, status_code) VALUES (?, ?, ?, ?)",
+            (page["url"], page.get("title"), page["text_content"], page["status_code"]),
+        )
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        return False
+    finally:
+        conn.close()
+
+
+def save_opportunity(opp: dict, db_path: Optional[str] = None) -> bool:
+    """Simpan atau update opportunity ke database."""
+    conn = get_connection(db_path)
+    try:
+        # Cek apakah sudah ada berdasarkan canonical_key
+        existing = conn.execute(
+            "SELECT id, score FROM opportunities WHERE canonical_key = ?",
+            (opp["canonical_key"],),
+        ).fetchone()
+
+        if existing:
+            # Update last_seen dan simpan skor tertinggi
+            new_score = max(existing["score"] or 0, opp.get("score", 0))
+            conn.execute(
+                "UPDATE opportunities SET last_seen = CURRENT_TIMESTAMP, score = ? WHERE id = ?",
+                (new_score, existing["id"]),
+            )
+        else:
+            conn.execute(
+                """INSERT INTO opportunities
+                (canonical_key, title, company, role, category, location, work_mode,
+                 duration, salary, deadline, source_url, source_name, raw_text,
+                 summary, score, confidence)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    opp["canonical_key"],
+                    opp["title"],
+                    opp.get("company"),
+                    opp.get("role"),
+                    opp.get("category"),
+                    opp.get("location"),
+                    opp.get("work_mode"),
+                    opp.get("duration"),
+                    opp.get("salary"),
+                    opp.get("deadline"),
+                    opp["source_url"],
+                    opp.get("source_name"),
+                    opp.get("raw_text"),
+                    opp.get("summary"),
+                    opp.get("score", 0),
+                    opp.get("confidence", 0),
+                ),
+            )
+            # Update FTS index
+            row_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+            conn.execute(
+                """INSERT INTO opportunities_fts (rowid, title, company, role, category, location, raw_text)
+                VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    row_id,
+                    opp["title"],
+                    opp.get("company"),
+                    opp.get("role"),
+                    opp.get("category"),
+                    opp.get("location"),
+                    opp.get("raw_text"),
+                ),
+            )
+
+        conn.commit()
+        return True
+    except Exception:
+        return False
+    finally:
+        conn.close()
+
+
+def get_all_opportunities(db_path: Optional[str] = None) -> list[dict]:
+    """Ambil semua opportunities, urut berdasarkan score DESC."""
+    conn = get_connection(db_path)
+    rows = conn.execute(
+        "SELECT * FROM opportunities ORDER BY score DESC"
+    ).fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def get_opportunity_count(db_path: Optional[str] = None) -> int:
+    """Hitung jumlah opportunities di database."""
+    conn = get_connection(db_path)
+    count = conn.execute("SELECT COUNT(*) FROM opportunities").fetchone()[0]
+    conn.close()
+    return count
+
+
+def get_existing_urls(db_path: Optional[str] = None) -> set[str]:
+    """Ambil semua URL yang sudah ada di raw_pages."""
+    conn = get_connection(db_path)
+    rows = conn.execute("SELECT url FROM raw_pages").fetchall()
+    conn.close()
+    return {row["url"] for row in rows}
+
+
+def get_existing_canonical_keys(db_path: Optional[str] = None) -> set[str]:
+    """Ambil semua canonical_key yang sudah ada."""
+    conn = get_connection(db_path)
+    rows = conn.execute("SELECT canonical_key FROM opportunities").fetchall()
+    conn.close()
+    return {row["canonical_key"] for row in rows}
+
+
+def reset_db(db_path: Optional[str] = None) -> None:
+    """Hapus semua data dari database."""
+    conn = get_connection(db_path)
+    conn.execute("DELETE FROM raw_results")
+    conn.execute("DELETE FROM raw_pages")
+    conn.execute("DELETE FROM opportunities")
+    conn.execute("DELETE FROM opportunities_fts")
+    conn.commit()
+    conn.close()
+    console.print("[yellow][OK][/yellow] Database reset")
