@@ -1,9 +1,10 @@
 """Extractor — ekstrak metadata lowongan dari teks halaman (rule-based).
 
-Prinsip kualitas:
-- Role hanya dideteksi dari title + deskripsi awal (maks 1500 char)
-- Internship gate: harus ada sinyal magang di title ATAU deskripsi
-- Salary/duration/deadline harus format valid, bukan noise
+Prinsip:
+- Role hanya dari strong_titles di primary_text (title+heading)
+- supporting_skills hanya menambah confidence, tidak menentukan role
+- exclude_titles override role match
+- Word-boundary untuk internship detection
 - Better null daripada salah
 """
 
@@ -21,406 +22,399 @@ console = Console()
 
 CONFIG_PATH = Path("config/keywords.yml")
 
-
 # --- Regex Patterns ---
 
-# Pola tanggal Indonesia/English — harus tanggal eksplisit
 STRICT_DATE_PATTERNS = [
-    # 19 Mei 2026, 30 May 2026
     r"\b(\d{1,2})\s+(Januari|Februari|Maret|April|Mei|Juni|Juli|Agustus|September|Oktober|November|Desember|"
     r"January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})\b",
-    # 2026-05-19
     r"\b(\d{4})-(\d{2})-(\d{2})\b",
-    # 19/05/2026 or 19-05-2026
     r"\b(\d{1,2})[/\-](\d{1,2})[/\-](\d{4})\b",
 ]
 
-# Pola work mode — urutan penting: hybrid dicek duluan
-WORK_MODE_MAP = [
-    ("hybrid", ["hybrid", "wfo/wfh", "wfh/wfo", "flexible"]),
-    ("remote", ["fully remote", "remote", "work from home", "wfh", "kerja dari rumah"]),
-    ("onsite", ["onsite", "on-site", "on site", "work from office", "wfo", "di kantor"]),
-]
-
-# Pola salary — harus format yang masuk akal
 STRICT_SALARY_PATTERNS = [
-    # Rp3.000.000 atau Rp 3,000,000 — angka harus 5-9 digit
     r"Rp\.?\s?(\d{1,3}(?:[.,]\d{3}){1,3})",
-    # IDR 3,000,000
     r"IDR\s?(\d{1,3}(?:[.,]\d{3}){1,3})",
-    # 3-5 juta
-    r"(\d+)\s*[-–]\s*(\d+)\s*juta",
-    # 3 juta
+    r"(\d+)\s*[-\u2013]\s*(\d+)\s*juta",
     r"(\d+)\s*juta",
-    # Frasa eksplisit
     r"(?:uang saku|allowance|stipend)\s*[:]\s*(Rp\.?\s?\d[\d.,]+|\d+\s*juta)",
-    # paid/unpaid
     r"\b(paid internship|unpaid internship|unpaid)\b",
 ]
 
-# Pola durasi — harus angka + satuan yang jelas
 STRICT_DURATION_PATTERNS = [
     r"\b(\d{1,2})\s*(?:bulan|months?)\b",
     r"\b(\d{1,2})\s*(?:minggu|weeks?)\b",
 ]
 
-# Pola company
 COMPANY_PATTERNS = [
-    r"(?:at|di|@)\s+([A-Z][A-Za-z\s&.]+?)(?:\s*[-–|,]|\s*$)",
-    r"[-–—]\s*(?:PT\.?\s+)?([A-Z][A-Za-z\s&.]+?)(?:\s*[-–|,]|\s*$)",
+    r"(?:at|di|@)\s+([A-Z][A-Za-z\s&.]+?)(?:\s*[-\u2013|,]|\s*$)",
+    r"[-\u2013\u2014]\s*(?:PT\.?\s+)?([A-Z][A-Za-z\s&.]+?)(?:\s*[-\u2013|,]|\s*$)",
     r"(?:PT\.?\s+)([A-Z][A-Za-z\s&.]+)",
-    r"(?:perusahaan|company)[:\s]+([A-Za-z\s&.]+?)(?:\s*[-–|,.\n])",
+    r"(?:perusahaan|company)[:\s]+([A-Za-z\s&.]+?)(?:\s*[-\u2013|,.\n])",
 ]
 
-# Sinyal kuat internship di title (untuk early filter di pipeline)
+# Word-boundary patterns for internship detection
+_INTERN_PATTERNS = [
+    re.compile(r"\bintern\b", re.IGNORECASE),
+    re.compile(r"\binternship\b", re.IGNORECASE),
+    re.compile(r"\bmagang\b", re.IGNORECASE),
+    re.compile(r"\bapprentice\b", re.IGNORECASE),
+    re.compile(r"\bco-op\b", re.IGNORECASE),
+]
+
+# For early filter in pipeline (substring OK for speed)
 TITLE_INTERNSHIP_SIGNALS = [
     "intern", "internship", "magang", "trainee", "apprentice",
     "program magang", "kerja praktek", "praktik kerja", "co-op",
 ]
 
-# Regex word-boundary patterns untuk deteksi yang lebih akurat
-_INTERN_PATTERNS = [
-    re.compile(r"\bintern\b", re.IGNORECASE),
-    re.compile(r"\binternship\b", re.IGNORECASE),
-    re.compile(r"\bmagang\b", re.IGNORECASE),
-    re.compile(r"\btrainee\b", re.IGNORECASE),
-    re.compile(r"\bapprentice\b", re.IGNORECASE),
-    re.compile(r"\bco-op\b", re.IGNORECASE),
-    re.compile(r"\bkerja praktek\b", re.IGNORECASE),
-    re.compile(r"\bpraktik kerja\b", re.IGNORECASE),
-    re.compile(r"\bprogram magang\b", re.IGNORECASE),
-]
+ROLE_DISPLAY = {
+    "frontend": "Frontend Developer",
+    "backend": "Backend Developer",
+    "fullstack": "Fullstack Developer",
+    "mobile": "Mobile Developer",
+    "data_analyst": "Data Analyst",
+    "data_engineer": "Data Engineer",
+    "ai_ml": "AI/ML Engineer",
+    "actuarial": "Actuarial",
+    "ui_ux": "UI/UX Designer",
+    "product": "Product Manager",
+}
+
+ROLE_CATEGORY = {
+    "Frontend Developer": "tech",
+    "Backend Developer": "tech",
+    "Fullstack Developer": "tech",
+    "Mobile Developer": "tech",
+    "Data Analyst": "data",
+    "Data Engineer": "data",
+    "AI/ML Engineer": "data",
+    "Actuarial": "actuarial",
+    "UI/UX Designer": "design",
+    "Product Manager": "product",
+}
 
 
 def load_keywords(config_path: Optional[Path] = None) -> dict:
-    """Load keyword config."""
+    """Load keyword config (nested structure)."""
     path = config_path or CONFIG_PATH
     with open(path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
-# --- Internship Gate ---
+# === INTERNSHIP DETECTION ===
 
 def check_internship_title(title: str) -> bool:
-    """Cek apakah TITLE mengandung sinyal magang (word-boundary)."""
+    """Word-boundary check for internship in title."""
     return any(p.search(title) for p in _INTERN_PATTERNS)
 
 
 def detect_internship(text: str, title: str, config: dict) -> tuple[bool, int, str]:
     """
-    Deteksi apakah halaman berisi lowongan magang.
-    3-tier check: title -> job_type signal -> deskripsi awal.
+    3-tier internship detection with strong/weak terms.
     Return (is_internship, confidence, source).
     """
     title_lower = title.lower()
-    # Hanya pakai deskripsi awal untuk mengurangi noise
     text_lower = text[:3000].lower()
 
-    internship_terms = config.get("internship_terms", [])
-    negative_terms = config.get("negative_terms", [])
+    strong_terms = config.get("internship_terms", {}).get("strong", [])
+    weak_terms = config.get("internship_terms", {}).get("weak", [])
+    non_intern = config.get("non_internship_terms", [])
+    neg_hard = config.get("negative_terms", {}).get("hard_reject", [])
+    neg_likely = config.get("negative_terms", {}).get("likely_not_job", [])
 
-    # Tier 1: Title check — paling kuat (word-boundary)
-    if check_internship_title(title):
-        return True, 90, "title"
-
-    # Tier 2: Job type signal di deskripsi awal
-    job_type_signals = [
-        "job type: intern", "tipe pekerjaan: magang", "employment type: intern",
-        "jenis pekerjaan: magang", "tipe: magang", "type: internship",
-        "job type:internship", "work type: intern",
-    ]
-    for signal in job_type_signals:
-        if signal in text_lower:
-            return True, 85, "job_type"
-
-    # Tier 3: Deskripsi — butuh sinyal kuat (word-boundary)
-    positive_count = 0
-    for pattern in _INTERN_PATTERNS:
-        if pattern.search(text_lower):
-            positive_count += 1
-
-    # Extra positive signals (substring OK for these)
-    extra_positive = ["program magang", "mahasiswa", "fresh graduate",
-                      "semester akhir", "akhir kuliah", "kerja praktek"]
-    for signal in extra_positive:
-        if signal in text_lower:
-            positive_count += 1
-
-    # Hitung sinyal negatif
-    negative_count = 0
-    for term in negative_terms:
+    # Hard reject
+    for term in neg_hard:
         if term.lower() in text_lower:
-            negative_count += 1
+            return False, 0, "hard_reject"
 
-    if negative_count > 0:
-        return False, 0, "negative_signal"
+    # Likely not job (check title/heading)
+    for term in neg_likely:
+        if term.lower() in title_lower:
+            return False, 0, "likely_not_job"
 
-    # Butuh minimal 2 sinyal untuk lolos via deskripsi
-    if positive_count >= 2:
-        return True, min(positive_count * 15, 80), "description"
+    # Tier 1: Strong term in TITLE (word-boundary)
+    if check_internship_title(title):
+        return True, 90, "title_strong"
+
+    # Tier 2: Strong term in description (word-boundary)
+    strong_count = 0
+    for term in strong_terms:
+        pattern = re.compile(r"\b" + re.escape(term) + r"\b", re.IGNORECASE)
+        if pattern.search(text_lower):
+            strong_count += 1
+
+    # Extra strong signals
+    extra_strong = ["program magang", "mahasiswa magang", "internship program"]
+    for signal in extra_strong:
+        if signal in text_lower:
+            strong_count += 1
+
+    if strong_count >= 2:
+        return True, min(strong_count * 15 + 30, 85), "description_strong"
+
+    # Tier 3: Weak terms
+    weak_count = 0
+    for term in weak_terms:
+        if term.lower() in text_lower:
+            weak_count += 1
+
+    # Non-internship terms reduce confidence
+    non_intern_count = 0
+    for term in non_intern:
+        if term.lower() in title_lower:
+            non_intern_count += 1
+
+    if strong_count >= 1 and non_intern_count == 0:
+        return True, 60, "description_single_strong"
+
+    if weak_count >= 1 and strong_count >= 1:
+        return True, 55, "description_weak_plus_strong"
+
+    if non_intern_count > 0 and strong_count == 0:
+        return False, 0, "non_internship_title"
 
     return False, 0, "no_signal"
 
 
-# --- Role Detection (title-first) ---
+# === ROLE DETECTION ===
 
 def detect_role(title: str, description_head: str, config: dict) -> tuple[Optional[str], int]:
     """
-    Deteksi role dari title dulu, lalu deskripsi awal.
-    Return (role, confidence).
-
-    Confidence:
-    - 90+: role ada di title
-    - 60-80: role ada di deskripsi awal
-    - 0: tidak terdeteksi
+    Role detection: strong_titles in primary_text -> supporting_skills for confidence.
+    exclude_titles override.
+    Return (role_display_name, confidence).
     """
     role_keywords = config.get("role_keywords", {})
-    role_display = {
-        "frontend": "Frontend Developer",
-        "backend": "Backend Developer",
-        "fullstack": "Fullstack Developer",
-        "mobile": "Mobile Developer",
-        "data_analyst": "Data Analyst",
-        "data_engineer": "Data Engineer",
-        "ai_ml": "AI/ML Engineer",
-        "actuarial": "Actuarial",
-    }
+    primary = title.lower()
+    secondary = description_head[:1500].lower()
 
-    # --- Cek title dulu (paling reliable) ---
-    title_lower = title.lower()
-    title_match = _match_role(title_lower, role_keywords)
-    if title_match:
-        return role_display.get(title_match, title_match.replace("_", " ").title()), 95
+    best_role = None
+    best_conf = 0
 
-    # --- Cek deskripsi awal (maks 1500 char) ---
-    desc_lower = description_head[:1500].lower()
-    desc_match = _match_role(desc_lower, role_keywords)
-    if desc_match:
-        return role_display.get(desc_match, desc_match.replace("_", " ").title()), 65
+    for role_key, role_cfg in role_keywords.items():
+        if not isinstance(role_cfg, dict):
+            continue
+
+        strong_titles = role_cfg.get("strong_titles", [])
+        supporting = role_cfg.get("supporting_skills", [])
+        excludes = role_cfg.get("exclude_titles", [])
+
+        # Check exclude_titles first (in primary text)
+        excluded = any(ex.lower() in primary for ex in excludes)
+        if excluded:
+            continue
+
+        # Check strong_titles in primary text (title)
+        strong_match = any(st.lower() in primary for st in strong_titles)
+        if not strong_match:
+            continue
+
+        # Base confidence from strong title match
+        conf = 70
+
+        # Bonus from supporting skills in secondary text
+        skill_count = sum(1 for sk in supporting if sk.lower() in secondary)
+        conf += min(skill_count * 10, 30)
+
+        # Internship bonus
+        if check_internship_title(title):
+            conf += 20
+
+        if conf > best_conf:
+            best_conf = conf
+            best_role = role_key
+
+    if best_role and best_conf >= 60:
+        display = ROLE_DISPLAY.get(best_role, best_role.replace("_", " ").title())
+        return display, best_conf
 
     return None, 0
 
 
-def _match_role(text: str, role_keywords: dict) -> Optional[str]:
-    """
-    Cari role yang paling cocok dari text.
-    Gunakan keyword matching yang lebih ketat:
-    - Hanya hitung keyword yang spesifik (bukan generic seperti 'sql', 'api')
-    - Butuh minimal threshold match
-    """
-    # Keyword yang terlalu generic — hanya dihitung jika ada keyword spesifik lain
-    GENERIC_KEYWORDS = {
-        "sql", "api", "excel", "dashboard", "pipeline",
-        "pricing", "valuation", "reserving",
-    }
-
-    best_role = None
-    best_score = 0
-
-    for role_name, keywords in role_keywords.items():
-        specific_count = 0
-        generic_count = 0
-
-        for keyword in keywords:
-            kw_lower = keyword.lower()
-            if kw_lower in text:
-                if kw_lower in GENERIC_KEYWORDS:
-                    generic_count += 1
-                else:
-                    specific_count += 1
-
-        # Butuh minimal 1 keyword spesifik untuk match
-        if specific_count == 0:
-            continue
-
-        score = specific_count * 3 + generic_count * 1
-        if score > best_score:
-            best_score = score
-            best_role = role_name
-
-    return best_role
-
-
 def detect_category(role: Optional[str]) -> Optional[str]:
-    """Map role ke kategori. Return None jika role kosong."""
+    """Map role to category. None if no role."""
     if not role:
         return None
-
-    role_lower = role.lower()
-    if any(k in role_lower for k in ["frontend", "backend", "fullstack", "mobile", "software", "engineer"]):
-        return "tech"
-    if any(k in role_lower for k in ["data analyst", "data engineer", "ai", "ml"]):
-        return "data"
-    if any(k in role_lower for k in ["actuarial", "actuary", "aktuaria"]):
-        return "actuarial"
-    if any(k in role_lower for k in ["finance", "accounting", "risk", "investment", "banking"]):
-        return "finance"
-    return None  # Better null daripada "other" yang menyesatkan
+    return ROLE_CATEGORY.get(role, None)
 
 
-# --- Field Detectors (strict) ---
+# === LOCATION ===
 
-def detect_location(text: str, config: dict) -> Optional[str]:
-    """Deteksi lokasi dari teks awal."""
+def detect_location(text: str, config: dict) -> tuple[Optional[str], Optional[str]]:
+    """
+    Detect location from grouped locations.
+    Return (city_name, area_name).
+    """
     text_lower = text[:3000].lower()
-    locations = config.get("locations", [])
+    locations = config.get("locations", {})
 
-    for loc in locations:
-        if loc.lower() in text_lower:
-            return loc
-    return None
+    for area_name, cities in locations.items():
+        if not isinstance(cities, list):
+            continue
+        # Skip 'indonesia' as it's a fallback
+        if area_name == "indonesia":
+            continue
+        for city in cities:
+            if city.lower() in text_lower:
+                return city.title(), area_name
+
+    # Fallback: indonesia
+    indonesia_terms = locations.get("indonesia", [])
+    for term in indonesia_terms:
+        if term.lower() in text_lower:
+            return "Indonesia", "indonesia"
+
+    return None, None
 
 
-def detect_work_mode(text: str) -> Optional[str]:
-    """Deteksi work mode: remote, hybrid, onsite."""
+# === WORK MODE ===
+
+def detect_work_mode(text: str, config: dict) -> Optional[str]:
+    """Detect work mode from config work_modes."""
     text_lower = text[:3000].lower()
-    for mode, signals in WORK_MODE_MAP:
+    work_modes = config.get("work_modes", {})
+
+    # Check hybrid first (contains terms from both remote and onsite)
+    for mode in ["hybrid", "remote", "onsite"]:
+        signals = work_modes.get(mode, [])
         for signal in signals:
-            if signal in text_lower:
+            if signal.lower() in text_lower:
                 return mode
+
     return None
 
+
+# === NEGATIVE TERM CHECK ===
+
+def check_suspicious_role(title: str, config: dict) -> Optional[str]:
+    """Check if title matches suspicious_roles. Return matched term or None."""
+    title_lower = title.lower()
+    suspicious = config.get("negative_terms", {}).get("suspicious_roles", [])
+
+    for role in suspicious:
+        if role.lower() in title_lower:
+            return role
+    return None
+
+
+# === FIELD EXTRACTORS (strict) ===
 
 def detect_deadline(text: str) -> Optional[str]:
-    """
-    Deteksi deadline — hanya tanggal eksplisit.
-    Reject kalimat seperti "deadline ketat".
-    """
-    # Cari di sekitar keyword deadline
     deadline_context = ""
-    for keyword in ["deadline", "batas akhir", "penutupan", "ditutup", "apply before", "closed"]:
-        idx = text.lower().find(keyword)
+    for kw in ["deadline", "batas akhir", "penutupan", "ditutup", "apply before", "closed"]:
+        idx = text.lower().find(kw)
         if idx >= 0:
             deadline_context += text[max(0, idx):idx + 100] + " "
 
-    # Cari tanggal eksplisit di context atau seluruh teks awal
     search_text = deadline_context if deadline_context else text[:3000]
-
     for pattern in STRICT_DATE_PATTERNS:
         match = re.search(pattern, search_text, re.IGNORECASE)
         if match:
             return match.group(0).strip()
-
     return None
 
 
 def detect_salary(text: str) -> Optional[str]:
-    """
-    Deteksi salary — hanya format valid.
-    Reject noise seperti "RP,", angka gabungan aneh, dll.
-    """
-    search_text = text[:5000]
-
     for pattern in STRICT_SALARY_PATTERNS:
-        match = re.search(pattern, search_text, re.IGNORECASE)
+        match = re.search(pattern, text[:5000], re.IGNORECASE)
         if match:
             result = match.group(0).strip()
-
-            # Validasi: buang jika terlalu pendek (e.g., "Rp") atau terlalu panjang
             if len(result) < 4 or len(result) > 50:
                 continue
-
-            # Buang jika hanya "Rp" tanpa angka
             if re.match(r"^(Rp\.?|IDR)\s*$", result):
                 continue
-
             return result
-
     return None
 
 
 def detect_duration(text: str) -> Optional[str]:
-    """
-    Deteksi durasi — hanya format valid.
-    Angka harus 1-24 (bulan) atau 1-52 (minggu).
-    """
-    search_text = text[:5000]
-
     for pattern in STRICT_DURATION_PATTERNS:
-        match = re.search(pattern, search_text, re.IGNORECASE)
+        match = re.search(pattern, text[:5000], re.IGNORECASE)
         if match:
             num = int(match.group(1))
-
-            # Validasi range
-            if "bulan" in match.group(0).lower() or "month" in match.group(0).lower():
+            word = match.group(0).lower()
+            if "bulan" in word or "month" in word:
                 if 1 <= num <= 24:
                     return match.group(0).strip()
-            elif "minggu" in match.group(0).lower() or "week" in match.group(0).lower():
+            elif "minggu" in word or "week" in word:
                 if 1 <= num <= 52:
                     return match.group(0).strip()
-
     return None
 
 
 def detect_company(text: str, title: str) -> Optional[str]:
-    """Deteksi nama perusahaan dari title atau teks awal."""
     combined = f"{title}\n{text[:2000]}"
-
     for pattern in COMPANY_PATTERNS:
         match = re.search(pattern, combined)
         if match:
             company = match.group(1).strip()
-            if len(company) > 2 and len(company) < 100:
+            if 2 < len(company) < 100:
                 return company
-
     return None
 
 
 def generate_summary(text: str, max_length: int = 300) -> str:
-    """Generate ringkasan singkat dari teks."""
-    lines = [line.strip() for line in text.split("\n") if len(line.strip()) > 30]
+    lines = [l.strip() for l in text.split("\n") if len(l.strip()) > 30]
     summary = " ".join(lines[:5])
-
     if len(summary) > max_length:
         summary = summary[:max_length].rsplit(" ", 1)[0] + "..."
-
     return summary
 
 
 def get_source_name(url: str) -> str:
-    """Ambil nama source dari URL."""
-    domain = urlparse(url).netloc
-    domain = domain.replace("www.", "")
-    return domain
+    return urlparse(url).netloc.replace("www.", "")
 
 
-# --- Main Extractor ---
+# === MAIN EXTRACTOR ===
 
 def extract_opportunity(page: RawPage, config_path: Optional[Path] = None) -> Optional[Opportunity]:
     """
-    Ekstrak metadata lowongan dari satu halaman DETAIL.
-
-    Quality gates:
+    Extract opportunity with quality gates:
     1. Reject listing pages
-    2. Internship gate — harus ada sinyal magang
-    3. Role detection dari title first
-    4. Strict salary/duration/deadline
+    2. Reject hard_reject / likely_not_job
+    3. Internship gate (strong/weak)
+    4. Suspicious role check
+    5. Role detection (strong_titles + exclude_titles)
+    6. Strict field extraction
     """
     from engine.listing_parser import classify_page, is_listing_title, detect_platform
 
     title = page.title or ""
+    config = load_keywords(config_path)
 
-    # GATE 1: Reject halaman listing
+    # Gate 1: listing page
     page_type = page.page_type if page.page_type != "unknown" else classify_page(page.url, title)
     if page_type == "listing":
         return None
-
     if is_listing_title(title):
         return None
 
-    config = load_keywords(config_path)
     text = page.text_content
 
-    # GATE 2: Internship gate
-    is_intern, intern_confidence, intern_source = detect_internship(text, title, config)
+    # Gate 2: Internship detection
+    is_intern, intern_conf, intern_src = detect_internship(text, title, config)
     if not is_intern:
         return None
 
-    # Ekstrak fields dengan quality-first approach
-    role, role_confidence = detect_role(title, text, config)
-    category = detect_category(role) if role_confidence >= 60 else None
-    location = detect_location(text, config)
-    work_mode = detect_work_mode(text)
+    # Gate 3: Suspicious role check
+    suspicious = check_suspicious_role(title, config)
+
+    # Role detection
+    role, role_conf = detect_role(title, text, config)
+
+    # If suspicious role, prevent wrong category assignment
+    if suspicious:
+        role_conf = max(0, role_conf - 50)
+        if role_conf < 60:
+            role = None
+
+    category = detect_category(role) if role and role_conf >= 60 else None
+
+    # Location (grouped)
+    location, location_area = detect_location(text, config)
+    work_mode = detect_work_mode(text, config)
+
+    # Strict fields
     deadline = detect_deadline(text)
     salary = detect_salary(text)
     duration = detect_duration(text)
@@ -429,13 +423,11 @@ def extract_opportunity(page: RawPage, config_path: Optional[Path] = None) -> Op
     source_name = get_source_name(page.url)
     platform = page.source_platform or detect_platform(page.url)
 
-    # Clean title
-    opp_title = title if title else "Untitled Opportunity"
-    opp_title = opp_title[:200]
+    opp_title = (title if title else "Untitled")[:200]
 
-    # Overall confidence: gabungan internship + role
-    confidence = intern_confidence
-    if role_confidence >= 60:
+    # Overall confidence
+    confidence = intern_conf
+    if role_conf >= 60:
         confidence = min(100, confidence + 10)
 
     return Opportunity(
@@ -444,6 +436,7 @@ def extract_opportunity(page: RawPage, config_path: Optional[Path] = None) -> Op
         role=role,
         category=category,
         location=location,
+        location_area=location_area,
         work_mode=work_mode,
         duration=duration,
         salary=salary,
@@ -456,34 +449,30 @@ def extract_opportunity(page: RawPage, config_path: Optional[Path] = None) -> Op
         summary=summary,
         score=0,
         confidence=confidence,
+        is_internship=is_intern,
+        internship_confidence=intern_conf,
+        role_confidence=role_conf,
         page_type="detail",
         extraction_status="extracted",
     )
 
 
 def extract_all(pages: list[RawPage], config_path: Optional[Path] = None) -> list[Opportunity]:
-    """
-    Ekstrak opportunities HANYA dari halaman detail.
-    Halaman listing dan non-internship di-skip.
-    """
+    """Extract opportunities. Skip listing + non-internship pages."""
     opportunities = []
-    skipped_listing = 0
-    skipped_not_intern = 0
+    skipped = 0
 
     for page in pages:
         if page.page_type == "listing":
-            skipped_listing += 1
+            skipped += 1
             continue
-
         opp = extract_opportunity(page, config_path)
         if opp:
             opportunities.append(opp)
         else:
-            skipped_not_intern += 1
+            skipped += 1
 
-    if skipped_listing > 0:
-        console.print(f"  [dim]Skipped {skipped_listing} listing pages[/dim]")
-    if skipped_not_intern > 0:
-        console.print(f"  [dim]Skipped {skipped_not_intern} non-internship/irrelevant pages[/dim]")
+    if skipped > 0:
+        console.print(f"  [dim]Skipped {skipped} non-internship/irrelevant pages[/dim]")
     console.print(f"[green][OK][/green] Extracted {len(opportunities)} opportunities from {len(pages)} pages")
     return opportunities

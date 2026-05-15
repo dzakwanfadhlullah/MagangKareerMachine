@@ -46,19 +46,24 @@ class Opportunity(BaseModel):
     role: Optional[str] = None
     category: Optional[str] = None
     location: Optional[str] = None
+    location_area: Optional[str] = None  # jakarta_area, west_java, etc.
     work_mode: Optional[str] = None  # remote | hybrid | onsite
     duration: Optional[str] = None
     salary: Optional[str] = None
     deadline: Optional[str] = None
     source_url: str  # Direct detail URL, bukan listing
-    detail_url: Optional[str] = None  # Alias eksplisit
+    detail_url: Optional[str] = None
     source_name: Optional[str] = None
-    source_platform: Optional[str] = None  # dealls | glints | jobstreet | ...
+    source_platform: Optional[str] = None
     raw_text: Optional[str] = None
     summary: Optional[str] = None
     score: int = 0
     confidence: int = 0
+    is_internship: bool = False
+    internship_confidence: int = 0
+    role_confidence: int = 0
     canonical_key: Optional[str] = None
-    page_type: str = "detail"  # Harus detail
-    extraction_status: str = "extracted"  # extracted | failed | rejected
+    page_type: str = "detail"
+    extraction_status: str = "extracted"  # extracted | rejected
     rejection_reason: Optional[str] = None
+

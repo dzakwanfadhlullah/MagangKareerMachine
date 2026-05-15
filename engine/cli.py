@@ -150,6 +150,7 @@ def validate_results():
     """Quality gate -- validasi data di database."""
     import re
     from engine.listing_parser import is_listing_url
+    from engine.extractor import load_keywords, check_suspicious_role
 
     console.rule("[bold cyan]Quality Gate: Validate Results[/bold cyan]")
 
@@ -158,6 +159,7 @@ def validate_results():
         console.print("[yellow]Belum ada data.[/yellow]")
         return
 
+    config = load_keywords()
     total = len(opportunities)
     issues = []
 
@@ -184,16 +186,19 @@ def validate_results():
                 issues.append(f"[BAD TITLE] {opp.get('title')}")
                 break
 
-    # Check 3: Non-internship
-    intern_signals = ["intern", "internship", "magang", "trainee", "apprentice"]
+    # Check 3: Non-internship (is_internship field OR text check)
     non_intern = []
     for opp in opportunities:
-        title = (opp.get("title") or "").lower()
-        raw = (opp.get("raw_text") or "")[:2000].lower()
-        has_signal = any(s in title or s in raw for s in intern_signals)
-        if not has_signal:
-            non_intern.append(opp.get("title"))
-            issues.append(f"[NOT INTERN] {opp.get('title')}")
+        is_intern = opp.get("is_internship", False)
+        if not is_intern:
+            # Fallback: text check
+            title = (opp.get("title") or "").lower()
+            raw = (opp.get("raw_text") or "")[:2000].lower()
+            signals = ["intern", "internship", "magang", "trainee", "apprentice"]
+            has_signal = any(s in title or s in raw for s in signals)
+            if not has_signal:
+                non_intern.append(opp.get("title"))
+                issues.append(f"[NOT INTERN] {opp.get('title')}")
 
     # Check 4: Invalid salary
     invalid_salary = []
@@ -219,20 +224,42 @@ def validate_results():
     for opp in non_detail:
         issues.append(f"[NON-DETAIL] {opp.get('title')}")
 
+    # Check 7: Role confidence (role set but confidence < 60)
+    bad_role_conf = []
+    for opp in opportunities:
+        role = opp.get("role")
+        role_conf = opp.get("role_confidence", 0)
+        if role and role_conf < 60:
+            bad_role_conf.append(f"{opp.get('title')} | role={role} conf={role_conf}")
+            issues.append(f"[LOW ROLE CONF] {opp.get('title')} | role={role} conf={role_conf}")
+
+    # Check 8: Suspicious role with tech/data/actuarial category
+    suspicious_cat = []
+    for opp in opportunities:
+        title = opp.get("title") or ""
+        sus = check_suspicious_role(title, config)
+        cat = opp.get("category") or ""
+        if sus and cat in ("tech", "data", "actuarial"):
+            suspicious_cat.append(f"{title} -> {cat}")
+            issues.append(f"[SUS ROLE] {title} classified as {cat}")
+
     # --- Report ---
     console.print(f"\n[bold]Total opportunities:[/bold] {total}")
-    console.print(f"  Listing URLs:    [{'red' if listing_urls else 'green'}]{len(listing_urls)}[/]")
-    console.print(f"  Bad titles:      [{'red' if bad_titles else 'green'}]{len(bad_titles)}[/]")
-    console.print(f"  Non-internship:  [{'red' if non_intern else 'green'}]{len(non_intern)}[/]")
-    console.print(f"  Invalid salary:  [{'red' if invalid_salary else 'green'}]{len(invalid_salary)}[/]")
-    console.print(f"  Invalid duration:[{'red' if invalid_duration else 'green'}]{len(invalid_duration)}[/]")
-    console.print(f"  Non-detail:      [{'red' if non_detail else 'green'}]{len(non_detail)}[/]")
+    console.print(f"  Listing URLs:     [{'red' if listing_urls else 'green'}]{len(listing_urls)}[/]")
+    console.print(f"  Bad titles:       [{'red' if bad_titles else 'green'}]{len(bad_titles)}[/]")
+    console.print(f"  Non-internship:   [{'red' if non_intern else 'green'}]{len(non_intern)}[/]")
+    console.print(f"  Invalid salary:   [{'red' if invalid_salary else 'green'}]{len(invalid_salary)}[/]")
+    console.print(f"  Invalid duration: [{'red' if invalid_duration else 'green'}]{len(invalid_duration)}[/]")
+    console.print(f"  Non-detail:       [{'red' if non_detail else 'green'}]{len(non_detail)}[/]")
+    console.print(f"  Low role conf:    [{'red' if bad_role_conf else 'green'}]{len(bad_role_conf)}[/]")
+    console.print(f"  Suspicious roles: [{'red' if suspicious_cat else 'green'}]{len(suspicious_cat)}[/]")
 
     if issues:
         console.print(f"\n[red][FAIL][/red] {len(issues)} issues:")
-        for issue in issues[:20]:
+        for issue in issues[:25]:
             console.print(f"  {issue}")
-        if len(issues) > 20:
-            console.print(f"  ... and {len(issues) - 20} more")
+        if len(issues) > 25:
+            console.print(f"  ... and {len(issues) - 25} more")
     else:
         console.print(f"\n[green][PASS][/green] All {total} opportunities passed quality gate!")
+

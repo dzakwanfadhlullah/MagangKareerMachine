@@ -101,8 +101,9 @@ def score_opportunity(
     # --- Positive Scores ---
 
     # Internship detected
-    internship_terms = keywords.get("internship_terms", [])
-    for term in internship_terms:
+    intern_cfg = keywords.get("internship_terms", {})
+    all_intern_terms = intern_cfg.get("strong", []) + intern_cfg.get("weak", []) if isinstance(intern_cfg, dict) else intern_cfg
+    for term in all_intern_terms:
         if term.lower() in combined:
             total += scores.get("internship_detected", 30)
             break
@@ -143,8 +144,9 @@ def score_opportunity(
     # --- Penalties ---
 
     # Bootcamp/course penalty
-    negative_terms = keywords.get("negative_terms", [])
-    for term in negative_terms:
+    neg_cfg = keywords.get("negative_terms", {})
+    hard_reject = neg_cfg.get("hard_reject", []) if isinstance(neg_cfg, dict) else neg_cfg
+    for term in hard_reject:
         if term.lower() in combined:
             if "bootcamp" in term.lower():
                 total += penalties.get("bootcamp", -40)
