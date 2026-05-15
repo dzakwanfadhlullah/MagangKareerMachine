@@ -18,7 +18,8 @@ EXPORT_DIR = os.getenv("EXPORT_DIR", "exports")
 EXPORT_COLUMNS = [
     "id", "score", "title", "company", "role", "category",
     "location", "work_mode", "duration", "salary", "deadline",
-    "source_name", "source_url", "summary", "first_seen", "last_seen",
+    "source_name", "source_platform", "source_url", "detail_url",
+    "page_type", "extraction_status", "summary", "first_seen", "last_seen",
 ]
 
 
