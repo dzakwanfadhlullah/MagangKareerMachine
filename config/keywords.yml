@@ -1,99 +1,587 @@
 internship_terms:
-  - intern
-  - internship
-  - magang
-  - trainee
-  - apprentice
+  strong:
+    - intern
+    - internship
+    - magang
+    - apprentice
+    - internship program
+    - program magang
+    - mahasiswa magang
+    - intern program
+
+  weak:
+    - trainee
+    - fresh graduate program
+    - student program
+    - campus hiring
+
+non_internship_terms:
+  - full time
+  - full-time
+  - permanent
+  - contract
+  - freelance
+  - senior
+  - supervisor
+  - manager
+  - lead
+  - head
+  - specialist
+  - officer
+  - executive
+  - staff
+  - associate
+  - coordinator
 
 role_keywords:
   frontend:
-    - frontend
-    - front-end
-    - front end
-    - react
-    - next.js
-    - vue
-    - angular
-    - ui engineer
-    - ui developer
+    strong_titles:
+      - frontend developer
+      - front-end developer
+      - front end developer
+      - frontend engineer
+      - front-end engineer
+      - ui engineer
+      - ui developer
+      - web frontend developer
+      - react developer
+      - next.js developer
+      - vue developer
+      - angular developer
+
+    supporting_skills:
+      - react
+      - react.js
+      - next.js
+      - vue
+      - vue.js
+      - angular
+      - javascript
+      - typescript
+      - html
+      - css
+      - tailwind
+      - bootstrap
+      - responsive design
+      - slicing
+      - figma to html
+      - api integration
+      - frontend
+      - web interface
+
+    exclude_titles:
+      - graphic designer
+      - ui ux designer
+      - product designer
+      - digital marketing
+      - content creator
+      - social media
+      - admin
+      - host
+      - kol specialist
 
   backend:
-    - backend
-    - back-end
-    - back end
-    - node.js
-    - fastapi
-    - spring boot
-    - golang
-    - django
-    - laravel
-    - express.js
+    strong_titles:
+      - backend developer
+      - back-end developer
+      - back end developer
+      - backend engineer
+      - back-end engineer
+      - api developer
+      - server-side developer
+      - node.js developer
+      - golang developer
+      - java backend developer
+      - python backend developer
+      - php backend developer
+
+    supporting_skills:
+      - node.js
+      - express.js
+      - fastapi
+      - django
+      - flask
+      - spring boot
+      - golang
+      - go
+      - laravel
+      - php
+      - java
+      - python
+      - rest api
+      - graphql
+      - microservices
+      - postgresql
+      - mysql
+      - mongodb
+      - redis
+      - docker
+      - jwt
+      - authentication
+      - authorization
+      - server
+      - database
+
+    exclude_titles:
+      - back office
+      - admin
+      - data entry
+      - document control
+      - procurement
+      - compliance
+      - finance
+      - accounting
+      - marketing
+      - sales
+      - architect intern
 
   fullstack:
-    - fullstack
-    - full-stack
-    - full stack
+    strong_titles:
+      - fullstack developer
+      - full-stack developer
+      - full stack developer
+      - fullstack engineer
+      - full-stack engineer
+      - full stack engineer
+      - web developer
+      - software developer
+      - software engineer
+
+    supporting_skills:
+      - frontend
+      - backend
+      - react
+      - next.js
+      - node.js
+      - express.js
+      - fastapi
+      - django
+      - laravel
+      - api
+      - database
+      - mysql
+      - postgresql
+      - mongodb
+      - tailwind
+      - typescript
+      - javascript
+
+    exclude_titles:
+      - graphic designer
+      - content creator
+      - social media
+      - marketing
+      - sales
+      - admin
+      - finance
+      - procurement
+      - document control
 
   mobile:
-    - mobile developer
-    - android developer
-    - ios developer
-    - flutter
-    - react native
-    - kotlin developer
-    - swift developer
+    strong_titles:
+      - mobile developer
+      - mobile engineer
+      - android developer
+      - android engineer
+      - ios developer
+      - ios engineer
+      - flutter developer
+      - react native developer
+      - kotlin developer
+      - swift developer
+      - mobile app developer
+
+    supporting_skills:
+      - android
+      - ios
+      - flutter
+      - dart
+      - kotlin
+      - swift
+      - react native
+      - jetpack compose
+      - xcode
+      - android studio
+      - mobile app
+      - app development
+      - firebase
+      - api integration
+      - play store
+      - app store
+
+    exclude_titles:
+      - mobile sales
+      - mobile promotor
+      - field sales
+      - technician
+      - admin
+      - social media
 
   data_analyst:
-    - data analyst
-    - data analytics
-    - business analyst
-    - bi analyst
-    - power bi
-    - tableau
+    strong_titles:
+      - data analyst
+      - data analytics intern
+      - junior data analyst
+      - business analyst
+      - bi analyst
+      - business intelligence analyst
+      - reporting analyst
+      - operations analyst
+      - product analyst
+      - growth analyst
+      - marketing analyst
+      - inventory data analyst
+
+    supporting_skills:
+      - sql
+      - excel
+      - google sheets
+      - power bi
+      - tableau
+      - looker studio
+      - metabase
+      - dashboard
+      - reporting
+      - data visualization
+      - data cleaning
+      - data analysis
+      - analytics
+      - business intelligence
+      - python
+      - pandas
+      - statistics
+      - a/b testing
+      - kpi
+      - metrics
+
+    exclude_titles:
+      - social media analyst
+      - credit analyst
+      - financial analyst
+      - investment analyst
+      - marketing admin
+      - admin
+      - data entry
+      - document control
+      - procurement
+      - compliance
+      - kol specialist
+      - affiliate marketing
+      - host livestreaming
 
   data_engineer:
-    - data engineer
-    - data engineering
-    - etl engineer
-    - data warehouse
-    - bigquery
+    strong_titles:
+      - data engineer
+      - junior data engineer
+      - data engineering intern
+      - etl engineer
+      - data pipeline engineer
+      - big data engineer
+      - analytics engineer
+      - data warehouse engineer
+
+    supporting_skills:
+      - etl
+      - elt
+      - data pipeline
+      - data warehouse
+      - data lake
+      - airflow
+      - dbt
+      - spark
+      - kafka
+      - bigquery
+      - snowflake
+      - redshift
+      - postgresql
+      - mysql
+      - python
+      - sql
+      - api extraction
+      - web scraping
+      - data modeling
+      - data quality
+      - orchestration
+
+    exclude_titles:
+      - data analyst
+      - business analyst
+      - admin
+      - data entry
+      - reporting officer
+      - document control
+      - network officer
+      - iot officer
 
   ai_ml:
-    - ai engineer
-    - machine learning
-    - ml engineer
-    - deep learning
-    - computer vision
-    - nlp engineer
+    strong_titles:
+      - ai engineer
+      - machine learning engineer
+      - ml engineer
+      - artificial intelligence intern
+      - machine learning intern
+      - data scientist
+      - junior data scientist
+      - computer vision engineer
+      - nlp engineer
+      - ai researcher
+      - generative ai engineer
+      - llm engineer
+
+    supporting_skills:
+      - machine learning
+      - deep learning
+      - artificial intelligence
+      - computer vision
+      - nlp
+      - natural language processing
+      - llm
+      - rag
+      - generative ai
+      - neural network
+      - tensorflow
+      - pytorch
+      - scikit-learn
+      - pandas
+      - numpy
+      - model training
+      - model evaluation
+      - feature engineering
+      - prompt engineering
+      - vector database
+      - embedding
+
+    exclude_titles:
+      - ai content creator
+      - ai artist
+      - ai video editor
+      - digital marketing
+      - social media
+      - graphic designer
+      - data entry
+      - admin
 
   actuarial:
-    - actuarial
-    - actuary
-    - aktuaria
-    - reserving analyst
-    - insurance liability
+    strong_titles:
+      - actuarial intern
+      - actuary intern
+      - actuarial analyst
+      - junior actuarial analyst
+      - actuarial pricing intern
+      - pricing and valuation intern
+      - valuation intern
+      - reserving intern
+      - actuarial modelling intern
+      - insurance pricing intern
+      - product pricing intern
+
+    supporting_skills:
+      - actuarial
+      - actuary
+      - aktuaria
+      - pricing
+      - valuation
+      - reserving
+      - insurance liability
+      - life insurance
+      - general insurance
+      - reinsurance
+      - risk modelling
+      - mortality table
+      - premium calculation
+      - financial modelling
+      - ifrs 17
+      - psak 117
+      - technical reserve
+      - r language
+      - excel
+      - vba
+      - statistics
+      - probability
+
+    exclude_titles:
+      - pricing specialist
+      - sales pricing
+      - product marketing
+      - kol specialist
+      - affiliate marketing
+      - business development
+      - procurement
+      - finance admin
+      - accounting staff
+      - insurance agent
+      - claims officer
+
+  ui_ux:
+    strong_titles:
+      - ui ux designer
+      - ui/ux designer
+      - ux designer
+      - ui designer
+      - product designer
+      - interaction designer
+      - ux researcher
+      - visual designer
+
+    supporting_skills:
+      - figma
+      - wireframe
+      - prototype
+      - user research
+      - usability testing
+      - design system
+      - user flow
+      - mockup
+      - interaction design
+      - design thinking
+      - information architecture
+
+    exclude_titles:
+      - graphic designer
+      - motion designer
+      - content creator
+      - social media designer
+      - video editor
+      - 3d designer
+      - illustrator
+
+  product:
+    strong_titles:
+      - product manager intern
+      - associate product manager
+      - product analyst
+      - product owner intern
+      - product management intern
+      - product operations intern
+
+    supporting_skills:
+      - product requirement document
+      - prd
+      - product roadmap
+      - user story
+      - backlog
+      - user research
+      - market research
+      - product analytics
+      - a/b testing
+      - agile
+      - scrum
+      - jira
+      - trello
+      - figma
+      - metrics
+      - kpi
+
+    exclude_titles:
+      - product marketing
+      - product sales
+      - product photographer
+      - product listing admin
+      - warehouse product
 
 locations:
-  - Indonesia
-  - Jakarta
-  - Bandung
-  - Tangerang
-  - Remote
-  - Hybrid
-  - Surabaya
-  - Yogyakarta
-  - Bekasi
-  - Depok
-  - Bogor
-  - Semarang
-  - Malang
-  - Medan
+  indonesia:
+    - indonesia
+    - remote indonesia
+    - seluruh indonesia
+
+  jakarta_area:
+    - jakarta
+    - dki jakarta
+    - jakarta pusat
+    - jakarta selatan
+    - jakarta utara
+    - jakarta barat
+    - jakarta timur
+    - jabodetabek
+    - tangerang
+    - tangerang selatan
+    - bekasi
+    - depok
+    - bogor
+
+  west_java:
+    - bandung
+    - cimahi
+    - sumedang
+    - karawang
+    - cikarang
+    - purwakarta
+
+  central_java_yogyakarta:
+    - semarang
+    - solo
+    - surakarta
+    - yogyakarta
+    - jogja
+    - sleman
+
+  east_java:
+    - surabaya
+    - malang
+    - sidoarjo
+    - gresik
+
+  other_major_cities:
+    - medan
+    - palembang
+    - batam
+    - bali
+    - denpasar
+    - makassar
+    - balikpapan
+
+work_modes:
+  remote:
+    - remote
+    - wfh
+    - work from home
+    - anywhere
+    - fully remote
+
+  hybrid:
+    - hybrid
+    - partly remote
+
+  onsite:
+    - onsite
+    - on-site
+    - wfo
+    - work from office
+    - office based
 
 negative_terms:
-  - bootcamp
-  - course
-  - kelas
-  - training berbayar
-  - paid class
-  - webinar
-  - seminar
+  hard_reject:
+    - bootcamp
+    - course
+    - kelas
+    - training berbayar
+    - paid class
+    - webinar
+    - seminar
+    - workshop berbayar
+    - sertifikasi berbayar
+    - mentorship berbayar
+
+  likely_not_job:
+    - article
+    - blog
+    - tips karir
+    - cara melamar
+    - contoh cv
+    - lowongan kerja populer
+    - lowongan kerja full time
+    - explore jobs
+    - job vacancy & opportunities
+
+  suspicious_roles:
+    - host livestreaming
+    - live streamer
+    - content creator
+    - affiliate marketing
+    - kol specialist
+    - sales representative
+    - telemarketing
+    - field sales
+    - admin online
+    - data entry
