@@ -12,6 +12,8 @@ class RawSearchResult(BaseModel):
     snippet: Optional[str] = None
     url: str
     source: str = "web"
+    page_type: str = "unknown"  # listing | detail | unknown
+    source_platform: Optional[str] = None  # dealls | glints | jobstreet | kalibrr | ...
 
 
 class RawPage(BaseModel):
@@ -20,11 +22,24 @@ class RawPage(BaseModel):
     url: str
     title: Optional[str] = None
     text_content: str
+    html_content: str = ""  # Raw HTML untuk listing parser
     status_code: int
+    page_type: str = "unknown"  # listing | detail | unknown
+    source_platform: Optional[str] = None
+
+
+class DetailLink(BaseModel):
+    """Link detail lowongan yang diekstrak dari halaman listing."""
+
+    url: str
+    title: Optional[str] = None
+    company: Optional[str] = None
+    source_platform: str
+    listing_url: str  # Halaman listing asal
 
 
 class Opportunity(BaseModel):
-    """Lowongan magang yang sudah dinormalisasi."""
+    """Lowongan magang yang sudah dinormalisasi — hanya dari detail page."""
 
     title: str
     company: Optional[str] = None
@@ -35,10 +50,15 @@ class Opportunity(BaseModel):
     duration: Optional[str] = None
     salary: Optional[str] = None
     deadline: Optional[str] = None
-    source_url: str
+    source_url: str  # Direct detail URL, bukan listing
+    detail_url: Optional[str] = None  # Alias eksplisit
     source_name: Optional[str] = None
+    source_platform: Optional[str] = None  # dealls | glints | jobstreet | ...
     raw_text: Optional[str] = None
     summary: Optional[str] = None
     score: int = 0
     confidence: int = 0
     canonical_key: Optional[str] = None
+    page_type: str = "detail"  # Harus detail
+    extraction_status: str = "extracted"  # extracted | failed | rejected
+    rejection_reason: Optional[str] = None

@@ -46,6 +46,8 @@ def init_db(db_path: Optional[str] = None) -> None:
             snippet TEXT,
             url TEXT UNIQUE,
             source TEXT,
+            page_type TEXT DEFAULT 'unknown',
+            source_platform TEXT,
             discovered_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -57,12 +59,29 @@ def init_db(db_path: Optional[str] = None) -> None:
             url TEXT UNIQUE,
             title TEXT,
             text_content TEXT,
+            html_content TEXT,
             status_code INTEGER,
+            page_type TEXT DEFAULT 'unknown',
+            source_platform TEXT,
             fetched_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     """)
 
-    # Tabel opportunities — lowongan final
+    # Tabel crawl_queue — link detail yang diekstrak dari listing pages
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS crawl_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            url TEXT UNIQUE,
+            title TEXT,
+            company TEXT,
+            source_platform TEXT,
+            listing_url TEXT,
+            status TEXT DEFAULT 'pending',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Tabel opportunities — lowongan final (hanya dari detail pages)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS opportunities (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -77,11 +96,16 @@ def init_db(db_path: Optional[str] = None) -> None:
             salary TEXT,
             deadline TEXT,
             source_url TEXT,
+            detail_url TEXT,
             source_name TEXT,
+            source_platform TEXT,
             raw_text TEXT,
             summary TEXT,
             score INTEGER,
             confidence INTEGER,
+            page_type TEXT DEFAULT 'detail',
+            extraction_status TEXT DEFAULT 'extracted',
+            rejection_reason TEXT,
             status TEXT DEFAULT 'new',
             first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
             last_seen DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -118,8 +142,14 @@ def save_raw_results(results: list[dict], db_path: Optional[str] = None) -> int:
     for r in results:
         try:
             conn.execute(
-                "INSERT OR IGNORE INTO raw_results (query, title, snippet, url, source) VALUES (?, ?, ?, ?, ?)",
-                (r["query"], r["title"], r.get("snippet"), r["url"], r.get("source", "web")),
+                """INSERT OR IGNORE INTO raw_results
+                (query, title, snippet, url, source, page_type, source_platform)
+                VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    r["query"], r["title"], r.get("snippet"), r["url"],
+                    r.get("source", "web"), r.get("page_type", "unknown"),
+                    r.get("source_platform"),
+                ),
             )
             saved += conn.total_changes
         except sqlite3.IntegrityError:
@@ -134,8 +164,14 @@ def save_raw_page(page: dict, db_path: Optional[str] = None) -> bool:
     conn = get_connection(db_path)
     try:
         conn.execute(
-            "INSERT OR IGNORE INTO raw_pages (url, title, text_content, status_code) VALUES (?, ?, ?, ?)",
-            (page["url"], page.get("title"), page["text_content"], page["status_code"]),
+            """INSERT OR IGNORE INTO raw_pages
+            (url, title, text_content, html_content, status_code, page_type, source_platform)
+            VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (
+                page["url"], page.get("title"), page["text_content"],
+                page.get("html_content", ""), page["status_code"],
+                page.get("page_type", "unknown"), page.get("source_platform"),
+            ),
         )
         conn.commit()
         return True
@@ -143,6 +179,47 @@ def save_raw_page(page: dict, db_path: Optional[str] = None) -> bool:
         return False
     finally:
         conn.close()
+
+
+def save_crawl_queue(links: list[dict], db_path: Optional[str] = None) -> int:
+    """Simpan detail links ke crawl queue. Return jumlah yang disimpan."""
+    conn = get_connection(db_path)
+    saved = 0
+    for link in links:
+        try:
+            conn.execute(
+                """INSERT OR IGNORE INTO crawl_queue
+                (url, title, company, source_platform, listing_url)
+                VALUES (?, ?, ?, ?, ?)""",
+                (
+                    link["url"], link.get("title"), link.get("company"),
+                    link.get("source_platform"), link.get("listing_url"),
+                ),
+            )
+            saved += 1
+        except sqlite3.IntegrityError:
+            pass
+    conn.commit()
+    conn.close()
+    return saved
+
+
+def get_pending_crawl_queue(db_path: Optional[str] = None) -> list[dict]:
+    """Ambil semua URL pending dari crawl queue."""
+    conn = get_connection(db_path)
+    rows = conn.execute(
+        "SELECT * FROM crawl_queue WHERE status = 'pending'"
+    ).fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
+def mark_crawl_done(url: str, db_path: Optional[str] = None) -> None:
+    """Tandai URL di crawl queue sebagai done."""
+    conn = get_connection(db_path)
+    conn.execute("UPDATE crawl_queue SET status = 'done' WHERE url = ?", (url,))
+    conn.commit()
+    conn.close()
 
 
 def save_opportunity(opp: dict, db_path: Optional[str] = None) -> bool:
@@ -166,9 +243,10 @@ def save_opportunity(opp: dict, db_path: Optional[str] = None) -> bool:
             conn.execute(
                 """INSERT INTO opportunities
                 (canonical_key, title, company, role, category, location, work_mode,
-                 duration, salary, deadline, source_url, source_name, raw_text,
-                 summary, score, confidence)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                 duration, salary, deadline, source_url, detail_url, source_name,
+                 source_platform, raw_text, summary, score, confidence,
+                 page_type, extraction_status, rejection_reason)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     opp["canonical_key"],
                     opp["title"],
@@ -181,11 +259,16 @@ def save_opportunity(opp: dict, db_path: Optional[str] = None) -> bool:
                     opp.get("salary"),
                     opp.get("deadline"),
                     opp["source_url"],
+                    opp.get("detail_url"),
                     opp.get("source_name"),
+                    opp.get("source_platform"),
                     opp.get("raw_text"),
                     opp.get("summary"),
                     opp.get("score", 0),
                     opp.get("confidence", 0),
+                    opp.get("page_type", "detail"),
+                    opp.get("extraction_status", "extracted"),
+                    opp.get("rejection_reason"),
                 ),
             )
             # Update FTS index
@@ -251,6 +334,7 @@ def reset_db(db_path: Optional[str] = None) -> None:
     conn = get_connection(db_path)
     conn.execute("DELETE FROM raw_results")
     conn.execute("DELETE FROM raw_pages")
+    conn.execute("DELETE FROM crawl_queue")
     conn.execute("DELETE FROM opportunities")
     conn.execute("DELETE FROM opportunities_fts")
     conn.commit()
