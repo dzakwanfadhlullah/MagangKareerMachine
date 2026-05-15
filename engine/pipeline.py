@@ -38,30 +38,45 @@ console = Console()
 
 def _early_filter_links(links: list[dict]) -> list[dict]:
     """
-    Filter links sebelum fetch: hanya ambil yang title-nya
-    mengandung sinyal internship. Kalau title kosong, tetap lolos
-    (beri kesempatan).
+    Soft filter sebelum fetch.
+    Hanya SKIP jika title jelas bukan internship (senior/manager/director).
+    Sisanya lolos — extractor internship gate yang menentukan final.
     """
+    # Title yang JELAS bukan internship — skip langsung
+    NON_INTERN_SIGNALS = [
+        "senior", "manager", "director", "head of", "lead ",
+        "supervisor", "principal", "vp ", "vice president",
+        "chief ", "c-level",
+    ]
+
     filtered = []
     skipped = 0
 
     for link in links:
         title = (link.get("title") or "").lower()
 
-        # Kalau tidak ada title, loloskan (beri kesempatan)
+        # Kalau tidak ada title, loloskan
         if not title:
             filtered.append(link)
             continue
 
-        # Cek sinyal internship di title
+        # Jika title mengandung sinyal intern, pasti lolos
         has_intern = any(s in title for s in TITLE_INTERNSHIP_SIGNALS)
         if has_intern:
             filtered.append(link)
-        else:
+            continue
+
+        # Jika title jelas non-intern, skip
+        is_senior = any(s in title for s in NON_INTERN_SIGNALS)
+        if is_senior:
             skipped += 1
+            continue
+
+        # Sisanya: beri kesempatan (extractor internship gate will decide)
+        filtered.append(link)
 
     if skipped > 0:
-        console.print(f"  [dim]Early filter: skipped {skipped} non-internship links[/dim]")
+        console.print(f"  [dim]Early filter: skipped {skipped} senior/management links[/dim]")
 
     return filtered
 

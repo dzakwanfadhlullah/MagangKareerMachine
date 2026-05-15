@@ -21,14 +21,17 @@ from engine.extractor import (
 
 
 def test_internship_title_gate():
-    """Title harus mengandung sinyal internship."""
+    """Title harus mengandung sinyal internship (word-boundary)."""
     assert check_internship_title("Frontend Developer Intern") is True
     assert check_internship_title("Magang Data Analyst") is True
     assert check_internship_title("Internship Backend Developer") is True
     assert check_internship_title("KOL Specialist") is False
     assert check_internship_title("Document Control") is False
     assert check_internship_title("Marketing Admin") is False
-    print("[PASS] internship title gate")
+    # Word boundary: 'internasional' bukan 'intern'
+    assert check_internship_title("Ganesha Utopia Internasional") is False
+    assert check_internship_title("PT International Company") is False
+    print("[PASS] internship title gate (word-boundary)")
 
 
 def test_detect_internship_3tier():

@@ -3,10 +3,13 @@ search:
   max_results_per_query: 20
 
 manual_sources:
+  # SSR platforms first (fast, no Playwright needed)
+  - https://dealls.com/loker
+  - https://www.kalibrr.id/id-ID/job-board
+  # SPA platforms (need Playwright for listing, but detail pages work with requests)
+  - https://glints.com/id/en/find-jobs/loker-front-end-developer-internship
+  - https://glints.com/id/en/find-jobs/loker-data-analyst-internship
+  # Jobstreet SPA (currently no detail links via requests, needs Playwright)
   - https://www.jobstreet.co.id/id/frontend-developer-internship-jobs
   - https://www.jobstreet.co.id/id/data-analyst-internship-jobs
   - https://www.jobstreet.co.id/id/software-engineer-internship-jobs
-  - https://glints.com/id/en/find-jobs/loker-front-end-developer-internship
-  - https://glints.com/id/en/find-jobs/loker-data-analyst-internship
-  - https://dealls.com/loker
-  - https://www.kalibrr.id/id-ID/job-board

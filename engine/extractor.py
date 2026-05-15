@@ -72,10 +72,23 @@ COMPANY_PATTERNS = [
     r"(?:perusahaan|company)[:\s]+([A-Za-z\s&.]+?)(?:\s*[-–|,.\n])",
 ]
 
-# Sinyal kuat internship di title
+# Sinyal kuat internship di title (untuk early filter di pipeline)
 TITLE_INTERNSHIP_SIGNALS = [
     "intern", "internship", "magang", "trainee", "apprentice",
     "program magang", "kerja praktek", "praktik kerja", "co-op",
+]
+
+# Regex word-boundary patterns untuk deteksi yang lebih akurat
+_INTERN_PATTERNS = [
+    re.compile(r"\bintern\b", re.IGNORECASE),
+    re.compile(r"\binternship\b", re.IGNORECASE),
+    re.compile(r"\bmagang\b", re.IGNORECASE),
+    re.compile(r"\btrainee\b", re.IGNORECASE),
+    re.compile(r"\bapprentice\b", re.IGNORECASE),
+    re.compile(r"\bco-op\b", re.IGNORECASE),
+    re.compile(r"\bkerja praktek\b", re.IGNORECASE),
+    re.compile(r"\bpraktik kerja\b", re.IGNORECASE),
+    re.compile(r"\bprogram magang\b", re.IGNORECASE),
 ]
 
 
@@ -89,9 +102,8 @@ def load_keywords(config_path: Optional[Path] = None) -> dict:
 # --- Internship Gate ---
 
 def check_internship_title(title: str) -> bool:
-    """Cek apakah TITLE mengandung sinyal magang."""
-    title_lower = title.lower()
-    return any(signal in title_lower for signal in TITLE_INTERNSHIP_SIGNALS)
+    """Cek apakah TITLE mengandung sinyal magang (word-boundary)."""
+    return any(p.search(title) for p in _INTERN_PATTERNS)
 
 
 def detect_internship(text: str, title: str, config: dict) -> tuple[bool, int, str]:
@@ -107,7 +119,7 @@ def detect_internship(text: str, title: str, config: dict) -> tuple[bool, int, s
     internship_terms = config.get("internship_terms", [])
     negative_terms = config.get("negative_terms", [])
 
-    # Tier 1: Title check — paling kuat
+    # Tier 1: Title check — paling kuat (word-boundary)
     if check_internship_title(title):
         return True, 90, "title"
 
@@ -121,13 +133,13 @@ def detect_internship(text: str, title: str, config: dict) -> tuple[bool, int, s
         if signal in text_lower:
             return True, 85, "job_type"
 
-    # Tier 3: Deskripsi — butuh sinyal kuat
+    # Tier 3: Deskripsi — butuh sinyal kuat (word-boundary)
     positive_count = 0
-    for term in internship_terms:
-        if term.lower() in text_lower:
+    for pattern in _INTERN_PATTERNS:
+        if pattern.search(text_lower):
             positive_count += 1
 
-    # Extra positive signals
+    # Extra positive signals (substring OK for these)
     extra_positive = ["program magang", "mahasiswa", "fresh graduate",
                       "semester akhir", "akhir kuliah", "kerja praktek"]
     for signal in extra_positive:
@@ -143,12 +155,9 @@ def detect_internship(text: str, title: str, config: dict) -> tuple[bool, int, s
     if negative_count > 0:
         return False, 0, "negative_signal"
 
+    # Butuh minimal 2 sinyal untuk lolos via deskripsi
     if positive_count >= 2:
         return True, min(positive_count * 15, 80), "description"
-
-    # Satu sinyal saja tidak cukup — butuh konteks tambahan
-    if positive_count == 1:
-        return True, 40, "weak_description"
 
     return False, 0, "no_signal"
 
