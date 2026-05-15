@@ -67,4 +67,4 @@ if __name__ == "__main__":
     test_score_low_relevance()
     test_score_bootcamp_penalty()
     test_check_expired()
-    print("\n✅ All scorer tests passed!")
+    print("\n[OK] All scorer tests passed!")

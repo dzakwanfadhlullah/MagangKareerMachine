@@ -29,12 +29,13 @@ DATE_PATTERNS = [
     r"(?:apply before|deadline|penutupan|batas akhir|ditutup)[:\s]+(.+?)(?:\.|$)",
 ]
 
-# Pola work mode
-WORK_MODE_MAP = {
-    "remote": ["remote", "wfh", "work from home", "kerja dari rumah", "fully remote"],
-    "hybrid": ["hybrid", "wfo/wfh", "flexible"],
-    "onsite": ["onsite", "on-site", "on site", "wfo", "work from office", "di kantor"],
-}
+# Pola work mode — urutan penting: hybrid dicek duluan karena
+# bisa mengandung "wfh" atau "wfo" yang juga ada di remote/onsite
+WORK_MODE_MAP = [
+    ("hybrid", ["hybrid", "wfo/wfh", "wfh/wfo", "flexible"]),
+    ("remote", ["fully remote", "remote", "work from home", "wfh", "kerja dari rumah"]),
+    ("onsite", ["onsite", "on-site", "on site", "work from office", "wfo", "di kantor"]),
+]
 
 # Pola salary
 SALARY_PATTERNS = [
@@ -169,7 +170,7 @@ def detect_location(text: str, config: dict) -> Optional[str]:
 def detect_work_mode(text: str) -> Optional[str]:
     """Deteksi work mode: remote, hybrid, onsite."""
     text_lower = text.lower()
-    for mode, signals in WORK_MODE_MAP.items():
+    for mode, signals in WORK_MODE_MAP:
         for signal in signals:
             if signal in text_lower:
                 return mode

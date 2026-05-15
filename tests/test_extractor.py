@@ -42,7 +42,7 @@ def test_detect_role():
     text = "Looking for React and Next.js frontend developer intern"
     role = detect_role(text, config)
     assert role == "Frontend Developer"
-    print(f"[PASS] detect_role → {role}")
+    print(f"[PASS] detect_role -> {role}")
 
 
 def test_detect_location():
@@ -50,7 +50,7 @@ def test_detect_location():
     text = "Posisi ini berlokasi di Jakarta dengan sistem hybrid"
     loc = detect_location(text, config)
     assert loc == "Jakarta"
-    print(f"[PASS] detect_location → {loc}")
+    print(f"[PASS] detect_location -> {loc}")
 
 
 def test_detect_work_mode():
@@ -108,7 +108,7 @@ def test_extract_opportunity():
     assert opp is not None
     assert opp.role is not None
     assert opp.confidence > 0
-    print(f"[PASS] extract_opportunity → title={opp.title}, role={opp.role}, confidence={opp.confidence}")
+    print(f"[PASS] extract_opportunity -> title={opp.title}, role={opp.role}, confidence={opp.confidence}")
 
 
 if __name__ == "__main__":
@@ -121,4 +121,4 @@ if __name__ == "__main__":
     test_detect_salary()
     test_detect_duration()
     test_extract_opportunity()
-    print("\n✅ All extractor tests passed!")
+    print("\n[OK] All extractor tests passed!")

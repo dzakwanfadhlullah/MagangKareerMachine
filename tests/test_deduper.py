@@ -40,7 +40,7 @@ def test_generate_canonical_key():
     key1 = generate_canonical_key(opp1)
     key2 = generate_canonical_key(opp2)
     assert key1 == key2, "Same opportunity from different sources should have same key"
-    print(f"[PASS] generate_canonical_key (same → {key1})")
+    print(f"[PASS] generate_canonical_key (same -> {key1})")
 
 
 def test_generate_canonical_key_different():
@@ -104,7 +104,7 @@ def test_dedupe_opportunities():
     # Yang disimpan harus skor tertinggi
     frontend = [o for o in result if "frontend" in o.title.lower()][0]
     assert frontend.score == 90, f"Expected score 90, got {frontend.score}"
-    print(f"[PASS] dedupe_opportunities: {len(opps)} → {len(result)}")
+    print(f"[PASS] dedupe_opportunities: {len(opps)} -> {len(result)}")
 
 
 if __name__ == "__main__":
@@ -114,4 +114,4 @@ if __name__ == "__main__":
     test_fuzzy_is_duplicate()
     test_fuzzy_not_duplicate()
     test_dedupe_opportunities()
-    print("\n✅ All deduper tests passed!")
+    print("\n[OK] All deduper tests passed!")
