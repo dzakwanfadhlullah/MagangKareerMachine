@@ -135,6 +135,21 @@ def test_glints_adapter():
     print(f"[PASS] GlintsAdapter -> {len(links)} links")
 
 
+def test_glints_adapter_extracts_script_state_links():
+    adapter = GlintsAdapter()
+    html = r"""
+    <html><body>
+      <script id="__NEXT_DATA__" type="application/json">
+      {"props":{"jobs":[{"url":"\/id\/en\/opportunities\/jobs\/software-engineer-intern\/abc123"}]}}
+      </script>
+    </body></html>
+    """
+    links = adapter.extract_detail_links("https://glints.com/id/en/find-jobs/loker-magang-internship", html)
+    assert len(links) == 1
+    assert links[0].url == "https://glints.com/id/en/opportunities/jobs/software-engineer-intern/abc123"
+    print("[PASS] GlintsAdapter script-state links")
+
+
 def test_jobstreet_adapter():
     adapter = JobstreetAdapter()
     assert adapter.needs_playwright() is True
@@ -149,6 +164,21 @@ def test_jobstreet_adapter():
     links = adapter.extract_detail_links("https://www.jobstreet.co.id/id/jobs", html)
     assert len(links) == 2, f"Expected 2 detail links, got {len(links)}"
     print(f"[PASS] JobstreetAdapter -> {len(links)} links")
+
+
+def test_jobstreet_adapter_extracts_script_state_links():
+    adapter = JobstreetAdapter()
+    html = r"""
+    <html><body>
+      <script>
+      window.__STATE__ = {"results":[{"url":"\/id\/job\/software-engineer-intern-78910"}]};
+      </script>
+    </body></html>
+    """
+    links = adapter.extract_detail_links("https://www.jobstreet.co.id/id/software-engineer-internship-jobs", html)
+    assert len(links) == 1
+    assert links[0].url == "https://www.jobstreet.co.id/id/job/software-engineer-intern-78910"
+    print("[PASS] JobstreetAdapter script-state links")
 
 
 def test_tier2_adapters():
@@ -195,6 +225,8 @@ if __name__ == "__main__":
     test_dealls_adapter()
     test_kalibrr_adapter()
     test_glints_adapter()
+    test_glints_adapter_extracts_script_state_links()
     test_jobstreet_adapter()
+    test_jobstreet_adapter_extracts_script_state_links()
     test_tier2_adapters()
     print("\n[OK] All listing_parser tests passed!")

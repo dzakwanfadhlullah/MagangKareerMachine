@@ -9,6 +9,7 @@ Adapter per platform:
 """
 
 import re
+import html as html_lib
 from abc import ABC, abstractmethod
 from typing import Optional
 from urllib.parse import urljoin, urlparse
@@ -19,6 +20,39 @@ from rich.console import Console
 from engine.models import DetailLink
 
 console = Console()
+
+
+def _script_search_text(html: str) -> str:
+    """Normalize raw HTML/script text so escaped app-state URLs are searchable."""
+    soup = BeautifulSoup(html, "html.parser")
+    scripts = [script.get_text() or "" for script in soup.find_all("script")]
+    text = "\n".join(scripts)
+    text = text.replace("\\/", "/")
+    text = text.encode("utf-8", errors="ignore").decode("unicode_escape", errors="ignore")
+    return html_lib.unescape(text)
+
+
+def _clean_extracted_url(url: str) -> str:
+    """Trim common JSON/HTML delimiters from regex-extracted URLs."""
+    return url.strip().rstrip("\\\"'<>),;]")
+
+
+def _extract_urls_from_text(html: str, patterns: list[str], base_url: str) -> list[str]:
+    """Extract URLs from raw HTML and embedded app state using regex patterns."""
+    text = _script_search_text(html)
+    urls: list[str] = []
+    seen = set()
+
+    for pattern in patterns:
+        for match in re.finditer(pattern, text, re.IGNORECASE):
+            url = _clean_extracted_url(match.group(0))
+            full_url = urljoin(base_url, url)
+            if full_url in seen:
+                continue
+            seen.add(full_url)
+            urls.append(full_url)
+
+    return urls
 
 
 # --- URL classification ---
@@ -252,6 +286,25 @@ class GlintsAdapter(PlatformAdapter):
                 listing_url=url,
             ))
 
+        script_urls = _extract_urls_from_text(
+            html,
+            [
+                r"https?://(?:www\.)?glints\.com/[^\s\"'<>]*?/opportunities/jobs/[^\s\"'<>]+",
+                r"/(?:id/)?(?:en/)?opportunities/jobs/[^\s\"'<>]+",
+            ],
+            "https://glints.com",
+        )
+        for full_url in script_urls:
+            if full_url in seen or is_listing_url(full_url):
+                continue
+            seen.add(full_url)
+            links.append(DetailLink(
+                url=full_url,
+                title=None,
+                source_platform="glints",
+                listing_url=url,
+            ))
+
         return links
 
 
@@ -289,6 +342,26 @@ class JobstreetAdapter(PlatformAdapter):
             links.append(DetailLink(
                 url=full_url,
                 title=title,
+                source_platform="jobstreet",
+                listing_url=url,
+            ))
+
+        script_urls = _extract_urls_from_text(
+            html,
+            [
+                r"https?://(?:www\.)?jobstreet\.co\.id/[^\s\"'<>]*?/job/[^\s\"'<>]+",
+                r"/id/job/[^\s\"'<>]+",
+                r"/job/[0-9][^\s\"'<>]*",
+            ],
+            "https://www.jobstreet.co.id",
+        )
+        for full_url in script_urls:
+            if full_url in seen or is_listing_url(full_url):
+                continue
+            seen.add(full_url)
+            links.append(DetailLink(
+                url=full_url,
+                title=None,
                 source_platform="jobstreet",
                 listing_url=url,
             ))
