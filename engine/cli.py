@@ -18,6 +18,7 @@ from engine.exporter import export_all
 from engine.reporter import generate_report
 from engine.evaluator import evaluate_dataset, print_eval_report
 from engine.searcher import get_crawl_profile
+from engine.models import Opportunity
 
 console = Console()
 app = typer.Typer(
@@ -46,6 +47,11 @@ def search(
     workers: int = typer.Option(5, "--workers", help="Concurrent fetch workers (1-8)"),
     timeout: int = typer.Option(10, "--timeout", help="Fetch timeout per page (seconds)"),
     query_limit: int = typer.Option(3, "--query-limit", help="Max search queries"),
+    target_category: Optional[str] = typer.Option(
+        None,
+        "--target-category",
+        help="Filter accepted results to a category/role, e.g. actuarial, frontend, data_analyst",
+    ),
 ):
     """Jalankan pipeline pencarian lengkap."""
     workers = min(workers, 8)
@@ -57,6 +63,7 @@ def search(
         workers=workers,
         timeout=timeout,
         query_limit=query_limit,
+        target_category=target_category,
     )
 
 
@@ -69,6 +76,11 @@ def crawl_sources(
     max_total_detail: Optional[int] = typer.Option(None, "--max-total-detail", help="Override max total detail pages"),
     workers: Optional[int] = typer.Option(None, "--workers", help="Override concurrent fetch workers (1-8)"),
     timeout: Optional[int] = typer.Option(None, "--timeout", help="Override fetch timeout per page (seconds)"),
+    target_category: Optional[str] = typer.Option(
+        None,
+        "--target-category",
+        help="Filter accepted results to a category/role, e.g. actuarial, frontend, data_analyst",
+    ),
 ):
     """Crawl dari manual sources di config/sources.yml."""
     try:
@@ -95,6 +107,7 @@ def crawl_sources(
         max_total_detail=max_total_detail,
         workers=workers,
         timeout=timeout,
+        target_category=target_category,
     )
 
 
@@ -201,11 +214,23 @@ def reset():
 
 
 @app.command(name="validate-results")
-def validate_results():
+def validate_results(
+    target_category: Optional[str] = typer.Option(
+        None,
+        "--target-category",
+        help="Require all accepted results to match this category/role",
+    ),
+):
     """Quality gate -- validasi data di database."""
     import re
     from engine.listing_parser import is_listing_url
-    from engine.extractor import load_keywords, check_suspicious_role
+    from engine.extractor import (
+        load_keywords,
+        check_suspicious_role,
+        normalize_target_category,
+        opportunity_matches_target,
+        title_has_seniority_without_internship,
+    )
 
     console.rule("[bold cyan]Quality Gate: Validate Results[/bold cyan]")
 
@@ -215,6 +240,7 @@ def validate_results():
         return
 
     config = load_keywords()
+    normalized_target = normalize_target_category(target_category)
     total = len(opportunities)
     issues = []
 
@@ -298,6 +324,27 @@ def validate_results():
             suspicious_cat.append(f"{title} -> {cat}")
             issues.append(f"[SUS ROLE] {title} classified as {cat}")
 
+    # Check 9: Targeted result integrity
+    out_of_target = []
+    target_null_role = []
+    target_seniority = []
+    if normalized_target:
+        for opp in opportunities:
+            title = opp.get("title") or ""
+            if not opp.get("role") or not opp.get("category"):
+                target_null_role.append(title)
+                issues.append(f"[TARGET NULL ROLE] {title}")
+                continue
+
+            opportunity = Opportunity(**opp)
+            if not opportunity_matches_target(opportunity, normalized_target):
+                out_of_target.append(f"{title} -> {opp.get('role') or '-'} / {opp.get('category') or '-'}")
+                issues.append(f"[OUT OF TARGET:{normalized_target}] {title}")
+
+            if title_has_seniority_without_internship(title):
+                target_seniority.append(title)
+                issues.append(f"[TARGET SENIORITY] {title}")
+
     # --- Report ---
     console.print(f"\n[bold]Total opportunities:[/bold] {total}")
     console.print(f"  Listing URLs:     [{'red' if listing_urls else 'green'}]{len(listing_urls)}[/]")
@@ -308,6 +355,11 @@ def validate_results():
     console.print(f"  Non-detail:       [{'red' if non_detail else 'green'}]{len(non_detail)}[/]")
     console.print(f"  Low role conf:    [{'red' if bad_role_conf else 'green'}]{len(bad_role_conf)}[/]")
     console.print(f"  Suspicious roles: [{'red' if suspicious_cat else 'green'}]{len(suspicious_cat)}[/]")
+    if normalized_target:
+        console.print(f"  Target:           [bold]{normalized_target}[/bold]")
+        console.print(f"  Out of target:    [{'red' if out_of_target else 'green'}]{len(out_of_target)}[/]")
+        console.print(f"  Target null role: [{'red' if target_null_role else 'green'}]{len(target_null_role)}[/]")
+        console.print(f"  Target seniority: [{'red' if target_seniority else 'green'}]{len(target_seniority)}[/]")
 
     if issues:
         console.print(f"\n[red][FAIL][/red] {len(issues)} issues:")
