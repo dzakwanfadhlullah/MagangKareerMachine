@@ -39,6 +39,7 @@ from engine.db import (
     save_raw_page,
     save_raw_api_responses,
     save_crawl_queue,
+    save_discovery_candidates,
     mark_crawl_done,
     save_opportunity,
     save_rejected_candidate,
@@ -59,9 +60,14 @@ def _init_source_diagnostics(raw_results) -> dict[str, dict]:
             "fetched": "no",
             "rendered": "-",
             "links": 0,
+            "dom_links": 0,
+            "script_links": 0,
+            "api_links": 0,
+            "target_links": 0,
             "detail_ok": 0,
             "saved": 0,
             "rejected": 0,
+            "out_of_scope": 0,
         }
     return diagnostics
 
@@ -76,9 +82,12 @@ def _print_source_diagnostics(diagnostics: dict[str, dict]) -> None:
     table.add_column("Fetched", justify="center", width=8)
     table.add_column("Rendered", justify="center", width=8)
     table.add_column("Links", justify="right", width=6)
+    table.add_column("API", justify="right", width=5)
+    table.add_column("Target", justify="right", width=6)
     table.add_column("Details", justify="right", width=7)
     table.add_column("Saved", justify="right", width=6)
     table.add_column("Reject", justify="right", width=6)
+    table.add_column("OOS", justify="right", width=5)
 
     for item in diagnostics.values():
         table.add_row(
@@ -87,9 +96,12 @@ def _print_source_diagnostics(diagnostics: dict[str, dict]) -> None:
             item["fetched"],
             item["rendered"],
             str(item["links"]),
+            str(item.get("api_links", 0)),
+            str(item.get("target_links", 0)),
             str(item["detail_ok"]),
             str(item["saved"]),
             str(item["rejected"]),
+            str(item.get("out_of_scope", 0)),
         )
 
     console.print(table)
@@ -252,6 +264,33 @@ def _prioritize_target_links(links: list[dict], target_category: Optional[str]) 
     return [link for _, _, link in indexed]
 
 
+def _annotate_discovery_links(links: list[dict], target_category: Optional[str]) -> list[dict]:
+    """Add target metadata to discovered links for queueing and diagnostics."""
+    target = normalize_target_category(target_category)
+    annotated = []
+    for link in links:
+        item = dict(link)
+        item["target_score"] = _target_link_score(item, target) if target else 0
+        item["target_category"] = target
+        item.setdefault("discovery_method", "dom")
+        annotated.append(item)
+    return annotated
+
+
+def _update_link_diagnostics(
+    diagnostics: Optional[dict[str, dict]],
+    source_url: str,
+    links: list[dict],
+) -> None:
+    if diagnostics is None or source_url not in diagnostics:
+        return
+    diagnostics[source_url]["links"] = len(links)
+    diagnostics[source_url]["dom_links"] = sum(1 for link in links if link.get("discovery_method") == "dom")
+    diagnostics[source_url]["script_links"] = sum(1 for link in links if link.get("discovery_method") == "script")
+    diagnostics[source_url]["api_links"] = sum(1 for link in links if link.get("discovery_method") == "api")
+    diagnostics[source_url]["target_links"] = sum(1 for link in links if (link.get("target_score") or 0) > 0)
+
+
 def _cap_links_per_source(links: list[dict], max_per_source: int) -> list[dict]:
     """Batasi jumlah links per source_platform."""
     counts: dict[str, int] = {}
@@ -294,6 +333,8 @@ def _stage2_process(
                 source_url = detail_source_map.get(rejection.url)
                 if source_url in diagnostics:
                     diagnostics[source_url]["rejected"] += 1
+                    if rejection.rejection_reason.startswith("out_of_scope_target"):
+                        diagnostics[source_url]["out_of_scope"] += 1
     if saved_rejections:
         console.print(f"  [dim]Saved {saved_rejections} rejected candidates for audit[/dim]")
 
@@ -406,10 +447,13 @@ def run_crawl_sources(
     all_links = []
     for page in listing_pages:
         links = extract_detail_links_from_listing(page.url, page.html_content)
-        if page.url in diagnostics:
-            diagnostics[page.url]["links"] = len(links)
-        for link in links:
-            link_data = link.model_dump()
+        link_rows = _annotate_discovery_links(
+            [link.model_dump() for link in links],
+            target_category,
+        )
+        _update_link_diagnostics(diagnostics, page.url, link_rows)
+        save_discovery_candidates(link_rows)
+        for link_data in link_rows:
             detail_source_map[link_data["url"]] = page.url
             all_links.append(link_data)
 
@@ -529,7 +573,12 @@ def run_search_pipeline(
         all_links = []
         for page in listing_pages:
             links = extract_detail_links_from_listing(page.url, page.html_content)
-            all_links.extend(link.model_dump() for link in links)
+            link_rows = _annotate_discovery_links(
+                [link.model_dump() for link in links],
+                target_category,
+            )
+            save_discovery_candidates(link_rows)
+            all_links.extend(link_rows)
 
         if all_links:
             all_links = _prioritize_target_links(all_links, target_category)

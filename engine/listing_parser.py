@@ -329,6 +329,7 @@ class GlintsAdapter(PlatformAdapter):
                 title=None,
                 source_platform="glints",
                 listing_url=url,
+                discovery_method="script",
             ))
 
         return _merge_links(links, _extract_api_links_from_embedded_json(url, html, self.platform))
@@ -390,6 +391,7 @@ class JobstreetAdapter(PlatformAdapter):
                 title=None,
                 source_platform="jobstreet",
                 listing_url=url,
+                discovery_method="script",
             ))
 
         return _merge_links(links, _extract_api_links_from_embedded_json(url, html, self.platform))
@@ -494,6 +496,7 @@ class ProspleAdapter(PlatformAdapter):
                 title=None,
                 source_platform="prosple",
                 listing_url=url,
+                discovery_method="script",
             ))
 
         return links
