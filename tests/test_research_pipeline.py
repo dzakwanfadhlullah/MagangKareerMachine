@@ -1,5 +1,6 @@
 """Tests for fast research pipeline integration."""
 
+import json
 import os
 import sys
 
@@ -121,6 +122,10 @@ def test_research_pipeline_accepts_static_direct_result(monkeypatch, tmp_path):
     assert opportunities[0]["category"] == "tech"
     assert get_discovery_candidates(db_path=db_path)
     assert get_rejected_candidates(db_path=db_path) == []
+    metadata = json.loads((export_dir / "run_metadata.json").read_text(encoding="utf-8"))
+    assert metadata["accepted_by_platform"] == {"generic": 1}
+    assert metadata["source_diversity_warning"] is True
+    assert metadata["accepted_results"] == 1
 
 
 def test_research_pipeline_follows_listing_detail_links(monkeypatch, tmp_path):

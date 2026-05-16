@@ -1,5 +1,6 @@
 """Fast research pipeline: search-index-first discovery then core extraction."""
 
+from collections import Counter
 from typing import Optional
 
 from rich.console import Console
@@ -32,6 +33,102 @@ from engine.research.url_ranker import rank_research_results, score_research_url
 from engine.scorer import score_all
 
 console = Console()
+
+PLATFORM_QUERY_MARKERS = {
+    "dealls": "site:dealls.com",
+    "glints": "site:glints.com",
+    "kalibrr": "site:kalibrr",
+    "jobstreet": "site:jobstreet",
+    "prosple": "site:prosple",
+    "suitmedia": "site:suitmedia",
+    "deloitte": "site:jobs.sea.deloitte",
+}
+
+
+def _platform_counts(items) -> dict[str, int]:
+    counter = Counter()
+    for item in items:
+        if isinstance(item, dict):
+            platform = item.get("source_platform")
+        else:
+            platform = getattr(item, "source_platform", None)
+        counter[platform or "unknown"] += 1
+    return dict(counter)
+
+
+def _platforms_from_queries(queries: list[str]) -> list[str]:
+    platforms = []
+    for query in queries:
+        lowered = query.lower()
+        for platform, marker in PLATFORM_QUERY_MARKERS.items():
+            if marker in lowered and platform not in platforms:
+                platforms.append(platform)
+    return platforms
+
+
+def _build_research_metadata(
+    *,
+    query: Optional[str],
+    location: str,
+    target_category: Optional[str],
+    profile: str,
+    min_score: int,
+    queries: list[str],
+    search_results: list[RawSearchResult],
+    ranked_results: list[RawSearchResult],
+    initial_pages: list[RawPage],
+    followup_discovered_urls: int,
+    followup_pages: list[RawPage],
+    verified_pages: list[RawPage],
+    opportunities,
+    rejected_counter: Counter,
+    workers: int,
+    timeout: int,
+) -> dict:
+    accepted_by_platform = Counter(opp.source_platform or "unknown" for opp in opportunities)
+    followup_urls = {page.url for page in followup_pages}
+    followup_verified_pages = [
+        page for page in verified_pages
+        if page.url in followup_urls
+    ]
+    platforms_with_hits = sorted({
+        result.source_platform or "unknown"
+        for result in search_results
+    })
+    accepted_platforms = [platform for platform, count in accepted_by_platform.items() if count > 0]
+
+    return {
+        "command": "research",
+        "query": query,
+        "location": location,
+        "target_category": target_category,
+        "profile": profile,
+        "min_score": min_score,
+        "query_count": len(queries),
+        "platforms_queried": _platforms_from_queries(queries),
+        "platforms_with_hits": platforms_with_hits,
+        "raw_results_by_platform": _platform_counts(search_results),
+        "selected_urls_by_platform": _platform_counts(ranked_results),
+        "initial_fetched_pages": len(initial_pages),
+        "initial_fetched_pages_by_platform": _platform_counts(initial_pages),
+        "followup_discovered_urls": followup_discovered_urls,
+        "followup_fetched_pages": len(followup_pages),
+        "followup_fetched_pages_by_platform": _platform_counts(followup_pages),
+        "followup_verified_pages": len(followup_verified_pages),
+        "followup_verified_pages_by_platform": _platform_counts(followup_verified_pages),
+        "verified_pages": len(verified_pages),
+        "verified_pages_by_platform": _platform_counts(verified_pages),
+        "accepted_results": len(opportunities),
+        "accepted_by_platform": dict(accepted_by_platform),
+        "rejected_candidates": sum(rejected_counter.values()),
+        "rejected_by_platform": dict(rejected_counter),
+        "source_diversity_warning": len(accepted_platforms) == 1,
+        "searched_urls": len(search_results),
+        "selected_urls": len(ranked_results),
+        "fetched_pages": len(initial_pages) + len(followup_pages),
+        "workers": workers,
+        "timeout": timeout,
+    }
 
 
 def _raw_page_from_dict(row: dict) -> RawPage:
@@ -160,14 +257,24 @@ def run_research_pipeline(
     )
     if not search_results:
         console.print("[yellow][WARN][/yellow] No search results")
-        export_all(metadata={
-            "command": "research",
-            "query": query,
-            "location": location,
-            "target_category": target_category,
-            "profile": profile,
-            "result_count": 0,
-        })
+        export_all(metadata=_build_research_metadata(
+            query=query,
+            location=location,
+            target_category=target_category,
+            profile=profile,
+            min_score=min_score,
+            queries=queries,
+            search_results=[],
+            ranked_results=[],
+            initial_pages=[],
+            followup_discovered_urls=0,
+            followup_pages=[],
+            verified_pages=[],
+            opportunities=[],
+            rejected_counter=Counter(),
+            workers=workers,
+            timeout=timeout,
+        ))
         return 0
 
     for result in search_results:
@@ -186,28 +293,56 @@ def run_research_pipeline(
 
     if not ranked_results:
         console.print("[yellow][WARN][/yellow] No URLs survived research ranking")
-        export_all(metadata={
-            "command": "research",
-            "query": query,
-            "location": location,
-            "target_category": target_category,
-            "profile": profile,
-            "result_count": 0,
-        })
+        export_all(metadata=_build_research_metadata(
+            query=query,
+            location=location,
+            target_category=target_category,
+            profile=profile,
+            min_score=min_score,
+            queries=queries,
+            search_results=search_results,
+            ranked_results=ranked_results,
+            initial_pages=[],
+            followup_discovered_urls=0,
+            followup_pages=[],
+            verified_pages=[],
+            opportunities=[],
+            rejected_counter=Counter(),
+            workers=workers,
+            timeout=timeout,
+        ))
         return 0
 
     console.print(f"\n[bold]Step 4:[/bold] Fetching top URLs ({workers} workers, {timeout}s timeout)...")
     pages = _fetch_or_load_research_results(ranked_results, workers=workers, timeout=timeout)
     if not pages:
         console.print("[yellow][WARN][/yellow] No pages fetched")
+        export_all(metadata=_build_research_metadata(
+            query=query,
+            location=location,
+            target_category=target_category,
+            profile=profile,
+            min_score=min_score,
+            queries=queries,
+            search_results=search_results,
+            ranked_results=ranked_results,
+            initial_pages=[],
+            followup_discovered_urls=0,
+            followup_pages=[],
+            verified_pages=[],
+            opportunities=[],
+            rejected_counter=Counter(),
+            workers=workers,
+            timeout=timeout,
+        ))
         return 0
 
     console.print("\n[bold]Step 5:[/bold] Verifying pages...")
     verified_pages = []
     listing_detail_links: list[DetailLink] = []
+    followup_pages: list[RawPage] = []
+    rejected_counter: Counter = Counter()
     rejected_count = 0
-    followup_fetched_count = 0
-    followup_verified_count = 0
     for page in pages:
         rejection = verify_research_page(page)
         if rejection:
@@ -215,6 +350,7 @@ def run_research_pipeline(
                 listing_detail_links.extend(extract_detail_links_from_listing(page.url, page.html_content))
             if save_rejected_candidate(rejection.model_dump()):
                 rejected_count += 1
+                rejected_counter[rejection.source_platform or "unknown"] += 1
             continue
         page.page_type = "detail"
         verified_pages.append(page)
@@ -239,17 +375,18 @@ def run_research_pipeline(
                 workers=workers,
                 timeout=timeout,
             )
-            followup_fetched_count = len(followup_pages)
             for page in followup_pages:
                 save_raw_page(page.model_dump())
                 if page.api_responses:
                     save_raw_api_responses([item.model_dump() for item in page.api_responses])
 
+            followup_verified_count = 0
             for page in followup_pages:
                 rejection = verify_research_page(page)
                 if rejection:
                     if save_rejected_candidate(rejection.model_dump()):
                         rejected_count += 1
+                        rejected_counter[rejection.source_platform or "unknown"] += 1
                     continue
                 page.page_type = "detail"
                 verified_pages.append(page)
@@ -265,26 +402,30 @@ def run_research_pipeline(
     for rejection in rejections:
         if save_rejected_candidate(rejection.model_dump()):
             saved_rejections += 1
+            rejected_counter[rejection.source_platform or "unknown"] += 1
     if saved_rejections:
         console.print(f"  [dim]Saved {saved_rejections} rejected candidates for audit[/dim]")
 
     if not opportunities:
         console.print("[yellow][WARN][/yellow] No accepted opportunities")
-        export_all(metadata={
-            "command": "research",
-            "query": query,
-            "location": location,
-            "target_category": target_category,
-            "profile": profile,
-            "query_count": len(queries),
-            "searched_urls": len(search_results),
-            "selected_urls": len(ranked_results),
-            "fetched_pages": len(pages) + followup_fetched_count,
-            "initial_fetched_pages": len(pages),
-            "followup_fetched_pages": followup_fetched_count,
-            "followup_verified_pages": followup_verified_count,
-            "verified_pages": len(verified_pages),
-        })
+        export_all(metadata=_build_research_metadata(
+            query=query,
+            location=location,
+            target_category=target_category,
+            profile=profile,
+            min_score=min_score,
+            queries=queries,
+            search_results=search_results,
+            ranked_results=ranked_results,
+            initial_pages=pages,
+            followup_discovered_urls=len(listing_detail_links),
+            followup_pages=followup_pages,
+            verified_pages=verified_pages,
+            opportunities=[],
+            rejected_counter=rejected_counter,
+            workers=workers,
+            timeout=timeout,
+        ))
         return 0
 
     console.print("\n[bold]Step 7:[/bold] Scoring, deduping, saving...")
@@ -299,24 +440,24 @@ def run_research_pipeline(
 
     console.print(f"[green][OK][/green] Saved {saved} opportunities")
     console.print("\n[bold]Exporting...[/bold]")
-    export_all(metadata={
-        "command": "research",
-        "query": query,
-        "location": location,
-        "target_category": target_category,
-        "profile": profile,
-        "min_score": min_score,
-        "query_count": len(queries),
-        "searched_urls": len(search_results),
-        "selected_urls": len(ranked_results),
-        "fetched_pages": len(pages) + followup_fetched_count,
-        "initial_fetched_pages": len(pages),
-        "followup_fetched_pages": followup_fetched_count,
-        "followup_verified_pages": followup_verified_count,
-        "verified_pages": len(verified_pages),
-        "workers": workers,
-        "timeout": timeout,
-    })
+    export_all(metadata=_build_research_metadata(
+        query=query,
+        location=location,
+        target_category=target_category,
+        profile=profile,
+        min_score=min_score,
+        queries=queries,
+        search_results=search_results,
+        ranked_results=ranked_results,
+        initial_pages=pages,
+        followup_discovered_urls=len(listing_detail_links),
+        followup_pages=followup_pages,
+        verified_pages=verified_pages,
+        opportunities=opportunities,
+        rejected_counter=rejected_counter,
+        workers=workers,
+        timeout=timeout,
+    ))
 
     console.rule("[bold green]Done[/bold green]")
     console.print(f"\n Saved: {saved} opportunities")
