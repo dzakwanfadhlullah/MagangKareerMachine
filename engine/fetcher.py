@@ -9,6 +9,7 @@ Optimisasi:
 import json
 import os
 import re
+import html as html_lib
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 from urllib.parse import urlparse
@@ -16,7 +17,8 @@ from urllib.parse import urlparse
 import requests
 from rich.console import Console
 
-from engine.models import RawSearchResult, RawPage
+from engine.discovery import raw_api_response_from_capture
+from engine.models import RawSearchResult, RawPage, RawApiResponse
 from engine.listing_parser import classify_page, detect_platform
 
 console = Console()
@@ -159,8 +161,25 @@ def extract_title_bs4(html: str) -> Optional[str]:
         return None
 
 
-def fetch_rendered_html(url: str, wait_ms: int = 3000) -> Optional[str]:
-    """Render a JS-heavy page with Playwright and return final HTML."""
+def _looks_like_json_response(content_type: str, url: str) -> bool:
+    haystack = f"{content_type} {url}".lower()
+    return (
+        "json" in haystack
+        or "graphql" in haystack
+        or "/api/" in haystack
+        or "api." in haystack
+        or "job" in haystack
+        or "search" in haystack
+    )
+
+
+def fetch_rendered_page(
+    url: str,
+    wait_ms: int = 3000,
+    scroll_rounds: int = 3,
+) -> tuple[Optional[str], list[RawApiResponse]]:
+    """Render a JS-heavy page with Playwright and capture useful JSON responses."""
+    api_responses: list[RawApiResponse] = []
     try:
         from playwright.sync_api import sync_playwright
 
@@ -168,14 +187,49 @@ def fetch_rendered_html(url: str, wait_ms: int = 3000) -> Optional[str]:
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page(user_agent=HEADERS["User-Agent"])
+
+            def on_response(response):
+                try:
+                    content_type = response.headers.get("content-type", "")
+                    if response.status >= 400:
+                        return
+                    if not _looks_like_json_response(content_type, response.url):
+                        return
+                    body = response.text()
+                    if not body or len(body) > 2_000_000:
+                        return
+                    stripped = body.lstrip()
+                    if not stripped.startswith(("{", "[")):
+                        return
+                    api_responses.append(raw_api_response_from_capture(
+                        listing_url=url,
+                        response_url=response.url,
+                        body=body[:2_000_000],
+                        platform=detect_platform(url),
+                        status_code=response.status,
+                        content_type=content_type,
+                    ))
+                except Exception:
+                    return
+
+            page.on("response", on_response)
             page.goto(url, wait_until="networkidle", timeout=30000)
             page.wait_for_timeout(wait_ms)
+            for _ in range(max(scroll_rounds, 0)):
+                page.mouse.wheel(0, 2500)
+                page.wait_for_timeout(900)
             html = page.content()
             browser.close()
-            return html
+            return html, api_responses
     except Exception as e:
         console.print(f"  [red][PW ERR][/red] Detail render failed for {url}: {e}")
-        return None
+        return None, api_responses
+
+
+def fetch_rendered_html(url: str, wait_ms: int = 3000) -> Optional[str]:
+    """Render a JS-heavy page with Playwright and return final HTML."""
+    html, _ = fetch_rendered_page(url, wait_ms=wait_ms)
+    return html
 
 
 def fetch_page(url: str, timeout: int = DEFAULT_TIMEOUT) -> Optional[RawPage]:
@@ -202,16 +256,24 @@ def fetch_page(url: str, timeout: int = DEFAULT_TIMEOUT) -> Optional[RawPage]:
             platform = detect_platform(url)
             page_type = classify_page(url, title or "")
             fetch_method = "requests"
+            api_responses: list[RawApiResponse] = []
 
             needs_listing_render = platform in PLAYWRIGHT_LISTING_PLATFORMS and page_type == "listing"
             needs_detail_render = platform in PLAYWRIGHT_DETAIL_PLATFORMS and page_type == "detail"
             if needs_listing_render or needs_detail_render:
-                rendered_html = fetch_rendered_html(url)
+                rendered_html, captured_responses = fetch_rendered_page(url)
                 if rendered_html:
                     html = rendered_html
                     status_code = 200
                     title = extract_title_bs4(html) or title
                     fetch_method = "playwright"
+                    api_responses = captured_responses
+                    if api_responses:
+                        payload = "\n".join(
+                            f'<script type="application/json" data-api-response="true">{html_lib.escape(item.body)}</script>'
+                            for item in api_responses[:20]
+                        )
+                        html = f"{html}\n{payload}"
 
             # Known platforms: BS4 saja (cepat, 3-5x lebih cepat dari trafilatura)
             if platform in KNOWN_PLATFORMS:
@@ -252,6 +314,7 @@ def fetch_page(url: str, timeout: int = DEFAULT_TIMEOUT) -> Optional[RawPage]:
                 page_type=page_type,
                 source_platform=platform,
                 fetch_method=fetch_method,
+                api_responses=api_responses,
             )
 
         except (requests.Timeout, requests.RequestException):

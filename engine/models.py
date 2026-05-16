@@ -1,6 +1,6 @@
 """Pydantic data models untuk MagangKareer Engine."""
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 
 
@@ -14,19 +14,6 @@ class RawSearchResult(BaseModel):
     source: str = "web"
     page_type: str = "unknown"  # listing | detail | unknown
     source_platform: Optional[str] = None  # dealls | glints | jobstreet | kalibrr | ...
-
-
-class RawPage(BaseModel):
-    """Konten halaman yang sudah di-fetch."""
-
-    url: str
-    title: Optional[str] = None
-    text_content: str
-    html_content: str = ""  # Raw HTML untuk listing parser
-    status_code: int
-    page_type: str = "unknown"  # listing | detail | unknown
-    source_platform: Optional[str] = None
-    fetch_method: Optional[str] = None  # requests | playwright | cached
 
 
 class DetailLink(BaseModel):
@@ -65,6 +52,20 @@ class RawApiResponse(BaseModel):
     status_code: int = 0
     content_type: Optional[str] = None
     body: str
+
+
+class RawPage(BaseModel):
+    """Konten halaman yang sudah di-fetch."""
+
+    url: str
+    title: Optional[str] = None
+    text_content: str
+    html_content: str = ""  # Raw HTML untuk listing parser
+    status_code: int
+    page_type: str = "unknown"  # listing | detail | unknown
+    source_platform: Optional[str] = None
+    fetch_method: Optional[str] = None  # requests | playwright | cached
+    api_responses: list[RawApiResponse] = Field(default_factory=list)
 
 
 class Opportunity(BaseModel):

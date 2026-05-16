@@ -55,6 +55,32 @@ def _extract_urls_from_text(html: str, patterns: list[str], base_url: str) -> li
     return urls
 
 
+def _merge_links(primary: list[DetailLink], extra: list[DetailLink]) -> list[DetailLink]:
+    """Merge links by URL while preserving order."""
+    seen = {link.url for link in primary}
+    merged = list(primary)
+    for link in extra:
+        if link.url in seen:
+            continue
+        seen.add(link.url)
+        merged.append(link)
+    return merged
+
+
+def _extract_api_links_from_embedded_json(url: str, html: str, platform: str) -> list[DetailLink]:
+    """Extract detail links from captured API JSON embedded into rendered HTML."""
+    if not html:
+        return []
+    from engine.discovery import extract_detail_links_from_json_text
+
+    soup = BeautifulSoup(html, "html.parser")
+    links: list[DetailLink] = []
+    for script in soup.find_all("script", attrs={"data-api-response": "true"}):
+        raw = script.string or script.get_text() or ""
+        links = _merge_links(links, extract_detail_links_from_json_text(url, raw, platform=platform))
+    return links
+
+
 # --- URL classification ---
 
 # Pola URL listing/search yang TIDAK boleh jadi opportunity
@@ -305,7 +331,7 @@ class GlintsAdapter(PlatformAdapter):
                 listing_url=url,
             ))
 
-        return links
+        return _merge_links(links, _extract_api_links_from_embedded_json(url, html, self.platform))
 
 
 class JobstreetAdapter(PlatformAdapter):
@@ -366,7 +392,7 @@ class JobstreetAdapter(PlatformAdapter):
                 listing_url=url,
             ))
 
-        return links
+        return _merge_links(links, _extract_api_links_from_embedded_json(url, html, self.platform))
 
 
 class LokerIdAdapter(PlatformAdapter):
@@ -613,10 +639,39 @@ def fetch_with_playwright(url: str, wait_ms: int = 5000) -> Optional[str]:
                     "Chrome/120.0.0.0 Safari/537.36"
                 )
             )
+            captured_json: list[str] = []
+
+            def on_response(response):
+                try:
+                    content_type = response.headers.get("content-type", "")
+                    hint = f"{content_type} {response.url}".lower()
+                    if response.status >= 400:
+                        return
+                    if "json" not in hint and "graphql" not in hint and "/api/" not in hint and "job" not in hint:
+                        return
+                    body = response.text()
+                    if not body or len(body) > 2_000_000:
+                        return
+                    if not body.lstrip().startswith(("{", "[")):
+                        return
+                    captured_json.append(body[:2_000_000])
+                except Exception:
+                    return
+
+            page.on("response", on_response)
             page.goto(url, wait_until="networkidle", timeout=30000)
             page.wait_for_timeout(wait_ms)
+            for _ in range(3):
+                page.mouse.wheel(0, 2500)
+                page.wait_for_timeout(900)
 
             html = page.content()
+            if captured_json:
+                payload = "\n".join(
+                    f'<script type="application/json" data-api-response="true">{html_lib.escape(body)}</script>'
+                    for body in captured_json[:20]
+                )
+                html = f"{html}\n{payload}"
             browser.close()
 
             return html

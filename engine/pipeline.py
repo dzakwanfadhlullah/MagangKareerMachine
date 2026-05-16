@@ -37,6 +37,7 @@ from engine.deduper import dedupe_opportunities
 from engine.db import (
     save_raw_results,
     save_raw_page,
+    save_raw_api_responses,
     save_crawl_queue,
     mark_crawl_done,
     save_opportunity,
@@ -120,6 +121,8 @@ def _fetch_or_load_results(raw_results, workers: int, timeout: int) -> list[RawP
     fetched_pages = fetch_all(raw_results, existing, workers=workers, timeout=timeout)
     for page in fetched_pages:
         save_raw_page(page.model_dump())
+        if page.api_responses:
+            save_raw_api_responses([item.model_dump() for item in page.api_responses])
 
     by_url = {page.url: page for page in cached_pages}
     by_url.update({page.url: page for page in fetched_pages})
@@ -137,6 +140,8 @@ def _fetch_or_load_detail_urls(urls: list[str], workers: int, timeout: int) -> l
     fetched_pages = fetch_detail_urls(urls, existing, workers=workers, timeout=timeout)
     for page in fetched_pages:
         save_raw_page(page.model_dump())
+        if page.api_responses:
+            save_raw_api_responses([item.model_dump() for item in page.api_responses])
 
     by_url = {page.url: page for page in cached_pages}
     by_url.update({page.url: page for page in fetched_pages})
