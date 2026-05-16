@@ -37,6 +37,34 @@ class DetailLink(BaseModel):
     company: Optional[str] = None
     source_platform: str
     listing_url: str  # Halaman listing asal
+    discovery_method: str = "dom"  # dom | script | api | search | manual
+    target_score: int = 0
+
+
+class DiscoveryCandidate(BaseModel):
+    """Kandidat detail URL hasil discovery sebelum fetch/extract final."""
+
+    url: str
+    title: Optional[str] = None
+    company: Optional[str] = None
+    source_platform: Optional[str] = None
+    listing_url: Optional[str] = None
+    discovery_method: str = "unknown"
+    target_category: Optional[str] = None
+    target_score: int = 0
+    status: str = "discovered"  # discovered | queued | fetched | accepted | rejected
+    rejection_reason: Optional[str] = None
+
+
+class RawApiResponse(BaseModel):
+    """XHR/fetch JSON response captured while rendering a listing."""
+
+    listing_url: str
+    response_url: str
+    source_platform: Optional[str] = None
+    status_code: int = 0
+    content_type: Optional[str] = None
+    body: str
 
 
 class Opportunity(BaseModel):

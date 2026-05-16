@@ -76,8 +76,42 @@ def init_db(db_path: Optional[str] = None) -> None:
             company TEXT,
             source_platform TEXT,
             listing_url TEXT,
+            discovery_method TEXT DEFAULT 'dom',
+            target_score INTEGER DEFAULT 0,
             status TEXT DEFAULT 'pending',
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS discovery_candidates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            url TEXT,
+            title TEXT,
+            company TEXT,
+            source_platform TEXT,
+            listing_url TEXT,
+            discovery_method TEXT DEFAULT 'unknown',
+            target_category TEXT,
+            target_score INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'discovered',
+            rejection_reason TEXT,
+            discovered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(url, listing_url, target_category)
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS raw_api_responses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            listing_url TEXT,
+            response_url TEXT,
+            source_platform TEXT,
+            status_code INTEGER DEFAULT 0,
+            content_type TEXT,
+            body TEXT,
+            captured_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(listing_url, response_url)
         )
     """)
 
@@ -148,12 +182,22 @@ def init_db(db_path: Optional[str] = None) -> None:
         )
     """)
 
+    _ensure_column(cursor, "crawl_queue", "discovery_method", "TEXT DEFAULT 'dom'")
+    _ensure_column(cursor, "crawl_queue", "target_score", "INTEGER DEFAULT 0")
+
     conn.commit()
     conn.close()
     console.print("[green][OK][/green] Database initialized")
 
 
 # --- CRUD Operations ---
+
+
+def _ensure_column(cursor: sqlite3.Cursor, table: str, column: str, definition: str) -> None:
+    """Add a column to an existing SQLite table if missing."""
+    columns = {row[1] for row in cursor.execute(f"PRAGMA table_info({table})").fetchall()}
+    if column not in columns:
+        cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
 def save_raw_results(results: list[dict], db_path: Optional[str] = None) -> int:
@@ -228,11 +272,12 @@ def save_crawl_queue(links: list[dict], db_path: Optional[str] = None) -> int:
         try:
             conn.execute(
                 """INSERT OR IGNORE INTO crawl_queue
-                (url, title, company, source_platform, listing_url)
-                VALUES (?, ?, ?, ?, ?)""",
+                (url, title, company, source_platform, listing_url, discovery_method, target_score)
+                VALUES (?, ?, ?, ?, ?, ?, ?)""",
                 (
                     link["url"], link.get("title"), link.get("company"),
                     link.get("source_platform"), link.get("listing_url"),
+                    link.get("discovery_method", "dom"), link.get("target_score", 0),
                 ),
             )
             saved += 1
@@ -241,6 +286,78 @@ def save_crawl_queue(links: list[dict], db_path: Optional[str] = None) -> int:
     conn.commit()
     conn.close()
     return saved
+
+
+def save_discovery_candidates(candidates: list[dict], db_path: Optional[str] = None) -> int:
+    """Simpan kandidat discovery untuk audit target coverage."""
+    conn = get_connection(db_path)
+    saved = 0
+    for candidate in candidates:
+        try:
+            conn.execute(
+                """INSERT OR REPLACE INTO discovery_candidates
+                (url, title, company, source_platform, listing_url, discovery_method,
+                 target_category, target_score, status, rejection_reason, discovered_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""",
+                (
+                    candidate["url"],
+                    candidate.get("title"),
+                    candidate.get("company"),
+                    candidate.get("source_platform"),
+                    candidate.get("listing_url"),
+                    candidate.get("discovery_method", "unknown"),
+                    candidate.get("target_category"),
+                    candidate.get("target_score", 0),
+                    candidate.get("status", "discovered"),
+                    candidate.get("rejection_reason"),
+                ),
+            )
+            saved += 1
+        except sqlite3.IntegrityError:
+            pass
+    conn.commit()
+    conn.close()
+    return saved
+
+
+def save_raw_api_responses(responses: list[dict], db_path: Optional[str] = None) -> int:
+    """Simpan captured API/XHR JSON responses untuk replay/debug parser."""
+    conn = get_connection(db_path)
+    saved = 0
+    for response in responses:
+        try:
+            conn.execute(
+                """INSERT OR REPLACE INTO raw_api_responses
+                (listing_url, response_url, source_platform, status_code, content_type, body, captured_at)
+                VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""",
+                (
+                    response["listing_url"],
+                    response["response_url"],
+                    response.get("source_platform"),
+                    response.get("status_code", 0),
+                    response.get("content_type"),
+                    response.get("body", ""),
+                ),
+            )
+            saved += 1
+        except sqlite3.IntegrityError:
+            pass
+    conn.commit()
+    conn.close()
+    return saved
+
+
+def get_discovery_candidates(limit: int = 50, db_path: Optional[str] = None) -> list[dict]:
+    """Ambil kandidat discovery terbaru."""
+    conn = get_connection(db_path)
+    rows = conn.execute(
+        """SELECT * FROM discovery_candidates
+        ORDER BY discovered_at DESC
+        LIMIT ?""",
+        (limit,),
+    ).fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
 
 
 def get_pending_crawl_queue(db_path: Optional[str] = None) -> list[dict]:
@@ -423,6 +540,8 @@ def reset_db(db_path: Optional[str] = None) -> None:
     conn.execute("DELETE FROM crawl_queue")
     conn.execute("DELETE FROM opportunities")
     conn.execute("DELETE FROM rejected_candidates")
+    conn.execute("DELETE FROM discovery_candidates")
+    conn.execute("DELETE FROM raw_api_responses")
     conn.execute("DELETE FROM opportunities_fts")
     conn.commit()
     conn.close()
