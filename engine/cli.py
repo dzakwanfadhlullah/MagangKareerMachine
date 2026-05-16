@@ -10,6 +10,7 @@ from engine.db import init_db, get_all_opportunities, get_opportunity_count, res
 from engine.pipeline import run_search_pipeline, run_crawl_sources
 from engine.exporter import export_all
 from engine.reporter import generate_report
+from engine.evaluator import evaluate_dataset, print_eval_report
 
 console = Console()
 app = typer.Typer(
@@ -263,3 +264,13 @@ def validate_results():
     else:
         console.print(f"\n[green][PASS][/green] All {total} opportunities passed quality gate!")
 
+
+@app.command(name="eval")
+def eval_dataset(
+    dataset: str = typer.Option("data/golden_dataset.csv", "--dataset", "-d", help="Path CSV golden dataset"),
+    min_score: int = typer.Option(40, "--min-score", help="Minimum score counted as saved"),
+    show_errors: int = typer.Option(20, "--show-errors", help="Max error rows to display"),
+):
+    """Evaluate extractor/scorer against a labeled golden dataset."""
+    metrics = evaluate_dataset(dataset, min_score=min_score)
+    print_eval_report(metrics, show_errors=show_errors)

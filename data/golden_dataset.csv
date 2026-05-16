@@ -1,0 +1,11 @@
+url,title,company,description,true_is_internship,true_role,true_category,true_location,should_save,notes
+https://example.com/jobs/frontend-intern,Frontend Developer Intern,PT Example Tech,"Program magang frontend untuk mahasiswa. Skills React, Next.js, TypeScript. Lokasi Jakarta. Apply sekarang.",true,frontend,tech,Jakarta,true,valid tech internship
+https://example.com/jobs/backend-intern,Backend Developer Intern,PT API Nusantara,"Internship backend developer. Node.js, Express, PostgreSQL. Remote Indonesia. Daftar sekarang.",true,backend,tech,Indonesia,true,valid backend internship
+https://example.com/jobs/data-analyst-intern,Data Analyst Intern,PT Data Maju,"Magang data analyst. SQL, Excel, Power BI, dashboard reporting. Lokasi Bandung.",true,data_analyst,data,Bandung,true,valid data internship
+https://example.com/jobs/uiux-intern,UI/UX Designer Intern,PT Desain Kita,"Internship UI UX designer. Figma, wireframe, prototype, user research. Jakarta hybrid.",true,ui_ux,design,Jakarta,true,valid design internship
+https://example.com/jobs/product-intern,Product Manager Intern,PT Produk Digital,"Product management internship. PRD, backlog, user story, agile, product analytics. Apply now.",true,product,product,Jakarta,true,valid product internship
+https://example.com/jobs/kol-specialist,KOL Specialist,PT Marketing Cepat,"Manage KOL and affiliate marketing campaigns. Full-time position.",false,,,Jakarta,false,not internship and suspicious role
+https://example.com/jobs/document-control,Document Control,PT Arsip Jaya,"Manage documents, filing system, compliance, and admin workflow. Permanent staff.",false,,,Bekasi,false,not tech backend
+https://example.com/jobs/fulltime-data,Data Analyst,PT Retail Data,"Full-time data analyst role using SQL and dashboard reporting.",false,,,Jakarta,false,not internship
+https://example.com/jobs/architect-intern,Architect Intern,PT Cipta Kota,"Program magang mahasiswa arsitektur. Lokasi Jakarta. Membantu desain bangunan.",true,,,Jakarta,true,valid internship but outside target role
+https://example.com/jobs/bootcamp,Frontend Developer Bootcamp,Course Provider,"Ikuti bootcamp frontend developer dan training berbayar dengan sertifikat.",false,,,Remote,false,course not job
