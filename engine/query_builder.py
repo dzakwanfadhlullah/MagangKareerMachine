@@ -8,6 +8,26 @@ import yaml
 
 CONFIG_PATH = Path("config/keywords.yml")
 
+TARGET_QUERY_EXPANSIONS = {
+    "actuarial": [
+        "actuarial internship",
+        "actuarial intern",
+        "actuary internship",
+        "actuary intern",
+        "magang aktuaria",
+        "pricing valuation internship",
+        "pricing and valuation intern",
+        "valuation intern",
+        "reserving intern",
+        "reinsurance internship",
+        "insurance pricing intern",
+        "product pricing intern",
+        "technical reserve intern",
+        "IFRS 17 intern",
+        "PSAK 117 intern",
+    ],
+}
+
 
 def load_keywords(config_path: Optional[Path] = None) -> dict:
     """Load keyword config dari YAML."""
@@ -68,15 +88,53 @@ def build_queries(role: str, location: str, config_path: Optional[Path] = None) 
     return queries
 
 
-def build_queries_from_raw(query: str, location: str) -> list[str]:
+def build_queries_from_raw(query: str, location: str, target_category: Optional[str] = None) -> list[str]:
     """
     Build queries dari raw query string tanpa ekspansi role.
     Untuk query yang sudah spesifik dari user.
     """
-    queries = [
-        f'"{query}" "{location}"',
-        f'{query} intern "{location}"',
-        f'{query} internship "{location}"',
-        f'magang {query} "{location}"',
-    ]
-    return queries
+    normalized_target = (target_category or "").strip().lower().replace("-", "_").replace(" ", "_")
+    raw_queries = [query]
+    raw_queries.extend(TARGET_QUERY_EXPANSIONS.get(normalized_target, []))
+
+    seen_raw = set()
+    unique_raw = []
+    for raw in raw_queries:
+        key = raw.lower().strip()
+        if key and key not in seen_raw:
+            seen_raw.add(key)
+            unique_raw.append(raw)
+
+    queries = []
+    if normalized_target:
+        for raw in unique_raw:
+            queries.append(f'"{raw}" "{location}"')
+        for raw in unique_raw:
+            queries.extend([
+                f'site:glints.com/id/opportunities/jobs "{raw}" "{location}"',
+                f'site:dealls.com/loker "{raw}" "{location}"',
+                f'site:jobstreet.co.id "{raw}" "{location}"',
+                f'site:prosple.com "{raw}" "{location}"',
+            ])
+        for raw in unique_raw:
+            queries.extend([
+                f'{raw} intern "{location}"',
+                f'{raw} internship "{location}"',
+                f'magang {raw} "{location}"',
+            ])
+    else:
+        for raw in unique_raw:
+            queries.extend([
+                f'"{raw}" "{location}"',
+                f'{raw} intern "{location}"',
+                f'{raw} internship "{location}"',
+                f'magang {raw} "{location}"',
+            ])
+
+    deduped = []
+    seen = set()
+    for q in queries:
+        if q not in seen:
+            seen.add(q)
+            deduped.append(q)
+    return deduped

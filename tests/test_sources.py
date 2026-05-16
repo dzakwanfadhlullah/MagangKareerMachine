@@ -43,6 +43,9 @@ def test_targeted_sources_are_prepended():
     assert entries[0]["name"] == "glints_magang_targeted_scan"
     assert results[0].query == "manual_source:role:actuarial"
     assert results[0].source_platform == "glints"
+    assert any(entry["name"] == "manulife_actuarial_internship_2026" for entry in entries)
+    manulife = next(r for r in results if "Manulife-6-5-months-Actuarial" in r.url)
+    assert manulife.page_type == "detail"
     assert any(r.query == "manual_source:tier_1" for r in results)
 
 

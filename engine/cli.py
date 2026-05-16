@@ -9,6 +9,7 @@ from rich.table import Table
 from engine.db import (
     init_db,
     get_all_opportunities,
+    get_discovery_candidates,
     get_opportunity_count,
     get_rejected_candidates,
     reset_db,
@@ -177,6 +178,35 @@ def list_rejections(
             str(row.get("internship_confidence") or 0),
             str(row.get("role_confidence") or 0),
             str(row.get("score") or 0),
+        )
+
+    console.print(table)
+
+
+@app.command(name="list-discovery")
+def list_discovery(
+    limit: int = typer.Option(30, "--limit", "-n", help="Jumlah discovery candidates"),
+):
+    """Tampilkan kandidat detail URL hasil discovery sebelum fetch/filter final."""
+    rows = get_discovery_candidates(limit)
+    if not rows:
+        console.print("[yellow]Belum ada discovery candidates.[/yellow]")
+        return
+
+    table = Table(title="Discovery Candidates", show_lines=False)
+    table.add_column("Target", style="yellow", max_width=12)
+    table.add_column("Score", justify="right", width=6)
+    table.add_column("Method", max_width=8)
+    table.add_column("Title", style="cyan", max_width=45)
+    table.add_column("Platform", max_width=12)
+
+    for row in rows:
+        table.add_row(
+            row.get("target_category") or "-",
+            str(row.get("target_score") or 0),
+            row.get("discovery_method") or "-",
+            (row.get("title") or row.get("url") or "-")[:45],
+            row.get("source_platform") or "-",
         )
 
     console.print(table)

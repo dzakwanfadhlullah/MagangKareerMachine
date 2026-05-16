@@ -416,7 +416,7 @@ def run_crawl_sources(
     # Limit sources
     raw_results = raw_results[:max_sources]
     for r in raw_results:
-        r.page_type = classify_page(r.url, r.title)
+        r.page_type = r.page_type if r.page_type in {"listing", "detail"} else classify_page(r.url, r.title)
         r.source_platform = detect_platform(r.url)
 
     save_raw_results([r.model_dump() for r in raw_results])
@@ -539,7 +539,7 @@ def run_search_pipeline(
 
     # Step 1: Build queries
     console.print("\n[bold]Step 1:[/bold] Building queries...")
-    queries = build_queries_from_raw(query, location)
+    queries = build_queries_from_raw(query, location, target_category=target_category)
     queries = queries[:query_limit]
     console.print(f"  Using {len(queries)} queries (max {query_limit})")
 
@@ -551,7 +551,7 @@ def run_search_pipeline(
         return 0
 
     for r in raw_results:
-        r.page_type = classify_page(r.url, r.title)
+        r.page_type = r.page_type if r.page_type in {"listing", "detail"} else classify_page(r.url, r.title)
         r.source_platform = detect_platform(r.url)
 
     save_raw_results([r.model_dump() for r in raw_results])

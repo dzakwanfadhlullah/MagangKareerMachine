@@ -159,6 +159,7 @@ def search_manual_sources(
             snippet=f"{tier} | {platform or domain}",
             url=url,
             source="manual",
+            page_type=item.get("type") or "listing",
             source_platform=platform,
         )
         results.append(result)

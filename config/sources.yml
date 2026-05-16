@@ -59,6 +59,36 @@ role_sources:
       type: listing
       url: https://dealls.com/loker/actuarial-internship
 
+    - name: prudential_indonesia_internship
+      platform: generic
+      type: listing
+      url: https://www.prudential.co.id/id/about-us/karir/magang
+
+    - name: manulife_actuarial_internship_2026
+      platform: generic
+      type: detail
+      url: https://careers.manulife.com/id/ba/job/JR25040985/Manulife-6-5-months-Actuarial-Internship-Program-2026
+
+    - name: manulife_internship_coop
+      platform: generic
+      type: listing
+      url: https://careers.manulife.com/global/en/internship-co-op
+
+    - name: allianz_actuarial_jobs
+      platform: generic
+      type: listing
+      url: https://careers.allianz.com/global/en/actuarial-jobs
+
+    - name: allianz_internal_actuarial_jobs
+      platform: generic
+      type: listing
+      url: https://internal-careers.allianz.com/go/Actuarial-Jobs/5123201/
+
+    - name: aia_indonesia_careers
+      platform: generic
+      type: listing
+      url: https://www.aia-financial.co.id/id/about-aia/about-us/careers
+
 sources:
   tier_1:
     - name: dealls_magang

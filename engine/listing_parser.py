@@ -103,6 +103,11 @@ LISTING_URL_PATTERNS = [
     r"^/tipe-pekerjaan/magang",
     r"^/lowongan-magang",
     r"^/q-.*lowongan\.html",
+    r"/about-us/karir/magang",
+    r"/global/.*/actuarial-jobs",
+    r"/go/Actuarial-Jobs",
+    r"/internship-co-op",
+    r"/about-aia/about-us/careers",
 ]
 
 # Title listing yang TIDAK boleh jadi opportunity
