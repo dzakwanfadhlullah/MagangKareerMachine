@@ -296,7 +296,9 @@ def validate_results(
 ):
     """Quality gate -- validasi data di database."""
     import re
+    from collections import Counter
     from engine.listing_parser import is_listing_url
+    from engine.url_utils import has_tracking_params
     from engine.extractor import (
         load_keywords,
         check_suspicious_role,
@@ -316,14 +318,26 @@ def validate_results(
     normalized_target = normalize_target_category(target_category)
     total = len(opportunities)
     issues = []
+    warnings = []
 
     # Check 1: Listing/category URLs
     listing_urls = []
     for opp in opportunities:
         url = opp.get("source_url", "")
-        if is_listing_url(url):
-            listing_urls.append(url)
-            issues.append(f"[LISTING URL] {url}")
+        detail_url = opp.get("detail_url") or ""
+        for candidate_url in [url, detail_url]:
+            if candidate_url and is_listing_url(candidate_url):
+                listing_urls.append(candidate_url)
+                issues.append(f"[LISTING URL] {candidate_url}")
+
+    # Check 1b: Tracking params must never appear in accepted canonical URLs
+    tracking_urls = []
+    for opp in opportunities:
+        for field in ["source_url", "detail_url"]:
+            url = opp.get(field) or ""
+            if url and has_tracking_params(url):
+                tracking_urls.append(url)
+                issues.append(f"[TRACKING URL:{field}] {url}")
 
     # Check 2: Bad titles
     bad_title_patterns = [
@@ -356,12 +370,21 @@ def validate_results(
 
     # Check 4: Invalid salary
     invalid_salary = []
+    salary_contradictions = []
+    low_salary_confidence = []
     for opp in opportunities:
         sal = opp.get("salary") or ""
+        text = f"{opp.get('title') or ''}\n{opp.get('summary') or ''}\n{opp.get('raw_text') or ''}".lower()
         if sal:
             if len(sal) < 4 or re.match(r"^[A-Z]+,?$", sal, re.IGNORECASE) or len(re.findall(r"\d", sal)) > 15:
                 invalid_salary.append(sal)
                 issues.append(f"[BAD SALARY] {sal}")
+            if "perusahaan tidak menampilkan gaji" in text or "salary not displayed" in text:
+                salary_contradictions.append(opp.get("title"))
+                warnings.append(f"[SALARY CONTRADICTION] {opp.get('title')}")
+            if (opp.get("salary_confidence") or 0) < 60:
+                low_salary_confidence.append(opp.get("title"))
+                warnings.append(f"[LOW SALARY CONF] {opp.get('title')} | {sal}")
 
     # Check 5: Invalid duration
     invalid_duration = []
@@ -377,6 +400,22 @@ def validate_results(
     non_detail = [o for o in opportunities if o.get("page_type") != "detail"]
     for opp in non_detail:
         issues.append(f"[NON-DETAIL] {opp.get('title')}")
+
+    # Check 6b: Closed/expired pages should never be accepted
+    closed_results = []
+    closed_patterns = [
+        r"\bclosed\b",
+        r"\bexpired\b",
+        r"\bno longer accepting\b",
+        r"\blowongan ditutup\b",
+        r"\bditutup\b",
+        r"\bkadaluarsa\b",
+    ]
+    for opp in opportunities:
+        text = f"{opp.get('title') or ''}\n{opp.get('summary') or ''}\n{opp.get('raw_text') or ''}".lower()
+        if any(re.search(pattern, text) for pattern in closed_patterns):
+            closed_results.append(opp.get("title"))
+            issues.append(f"[CLOSED ACCEPTED] {opp.get('title')}")
 
     # Check 7: Role confidence (role set but confidence < 60)
     bad_role_conf = []
@@ -396,6 +435,37 @@ def validate_results(
         if sus and cat in ("tech", "data", "actuarial"):
             suspicious_cat.append(f"{title} -> {cat}")
             issues.append(f"[SUS ROLE] {title} classified as {cat}")
+
+    # Check 8b: Hard negative terms should never appear in accepted results
+    hard_negative_results = []
+    hard_negative_terms = config.get("negative_terms", {}).get("hard_reject", [])
+    for opp in opportunities:
+        text = f"{opp.get('title') or ''}\n{opp.get('summary') or ''}\n{opp.get('raw_text') or ''}".lower()
+        for term in hard_negative_terms:
+            if term.lower() in text:
+                hard_negative_results.append(opp.get("title"))
+                issues.append(f"[HARD NEGATIVE] {opp.get('title')} | {term}")
+                break
+
+    # Check 8c: Field-level warnings
+    wfh_mismatch = []
+    metadata_low = []
+    for opp in opportunities:
+        text = f"{opp.get('title') or ''}\n{opp.get('summary') or ''}".lower()
+        if re.search(r"\bwfh\b|\bwork\s+from\s+home\b|\bfull\s+remote\b|\bfully\s+remote\b", text):
+            if opp.get("work_mode") != "remote":
+                wfh_mismatch.append(opp.get("title"))
+                warnings.append(f"[WFH WORK MODE] {opp.get('title')} -> {opp.get('work_mode') or 'null'}")
+        missing_fields = [field for field in ["company", "location", "role", "category"] if not opp.get(field)]
+        if len(missing_fields) >= 2:
+            metadata_low.append(opp.get("title"))
+            warnings.append(f"[LOW METADATA] {opp.get('title')} missing {','.join(missing_fields)}")
+
+    platform_counts = Counter(opp.get("source_platform") or "unknown" for opp in opportunities)
+    source_diversity_warning = len(platform_counts) == 1 and total > 1
+    if source_diversity_warning:
+        platform = next(iter(platform_counts))
+        warnings.append(f"[SOURCE DIVERSITY] all accepted results from {platform}")
 
     # Check 9: Targeted result integrity
     out_of_target = []
@@ -421,13 +491,20 @@ def validate_results(
     # --- Report ---
     console.print(f"\n[bold]Total opportunities:[/bold] {total}")
     console.print(f"  Listing URLs:     [{'red' if listing_urls else 'green'}]{len(listing_urls)}[/]")
+    console.print(f"  Tracking URLs:    [{'red' if tracking_urls else 'green'}]{len(tracking_urls)}[/]")
     console.print(f"  Bad titles:       [{'red' if bad_titles else 'green'}]{len(bad_titles)}[/]")
     console.print(f"  Non-internship:   [{'red' if non_intern else 'green'}]{len(non_intern)}[/]")
     console.print(f"  Invalid salary:   [{'red' if invalid_salary else 'green'}]{len(invalid_salary)}[/]")
+    console.print(f"  Salary warnings:  [{'yellow' if salary_contradictions or low_salary_confidence else 'green'}]{len(salary_contradictions) + len(low_salary_confidence)}[/]")
     console.print(f"  Invalid duration: [{'red' if invalid_duration else 'green'}]{len(invalid_duration)}[/]")
     console.print(f"  Non-detail:       [{'red' if non_detail else 'green'}]{len(non_detail)}[/]")
+    console.print(f"  Closed accepted:  [{'red' if closed_results else 'green'}]{len(closed_results)}[/]")
     console.print(f"  Low role conf:    [{'red' if bad_role_conf else 'green'}]{len(bad_role_conf)}[/]")
     console.print(f"  Suspicious roles: [{'red' if suspicious_cat else 'green'}]{len(suspicious_cat)}[/]")
+    console.print(f"  Hard negatives:   [{'red' if hard_negative_results else 'green'}]{len(hard_negative_results)}[/]")
+    console.print(f"  WFH mismatch:     [{'yellow' if wfh_mismatch else 'green'}]{len(wfh_mismatch)}[/]")
+    console.print(f"  Low metadata:     [{'yellow' if metadata_low else 'green'}]{len(metadata_low)}[/]")
+    console.print(f"  Source diversity: [{'yellow' if source_diversity_warning else 'green'}]{len(platform_counts)} platform(s)[/]")
     if normalized_target:
         console.print(f"  Target:           [bold]{normalized_target}[/bold]")
         console.print(f"  Out of target:    [{'red' if out_of_target else 'green'}]{len(out_of_target)}[/]")
@@ -440,8 +517,21 @@ def validate_results(
             console.print(f"  {issue}")
         if len(issues) > 25:
             console.print(f"  ... and {len(issues) - 25} more")
+        if warnings:
+            console.print(f"\n[yellow][WARN][/yellow] {len(warnings)} warnings:")
+            for warning in warnings[:25]:
+                console.print(f"  {warning}")
+            if len(warnings) > 25:
+                console.print(f"  ... and {len(warnings) - 25} more")
     else:
-        console.print(f"\n[green][PASS][/green] All {total} opportunities passed quality gate!")
+        if warnings:
+            console.print(f"\n[yellow][PASS WITH WARNINGS][/yellow] {total} opportunities passed hard gates, {len(warnings)} warnings:")
+            for warning in warnings[:25]:
+                console.print(f"  {warning}")
+            if len(warnings) > 25:
+                console.print(f"  ... and {len(warnings) - 25} more")
+        else:
+            console.print(f"\n[green][PASS][/green] All {total} opportunities passed quality gate!")
 
 
 @app.command(name="eval")
