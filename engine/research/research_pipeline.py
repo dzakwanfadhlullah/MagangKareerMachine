@@ -203,6 +203,8 @@ def run_research_pipeline(
     verified_pages = []
     listing_detail_links: list[DetailLink] = []
     rejected_count = 0
+    followup_fetched_count = 0
+    followup_verified_count = 0
     for page in pages:
         rejection = verify_research_page(page)
         if rejection:
@@ -234,12 +236,12 @@ def run_research_pipeline(
                 workers=workers,
                 timeout=timeout,
             )
+            followup_fetched_count = len(followup_pages)
             for page in followup_pages:
                 save_raw_page(page.model_dump())
                 if page.api_responses:
                     save_raw_api_responses([item.model_dump() for item in page.api_responses])
 
-            followup_verified = 0
             for page in followup_pages:
                 rejection = verify_research_page(page)
                 if rejection:
@@ -248,8 +250,8 @@ def run_research_pipeline(
                     continue
                 page.page_type = "detail"
                 verified_pages.append(page)
-                followup_verified += 1
-            console.print(f"  [green][OK][/green] Verified {followup_verified} follow-up detail pages")
+                followup_verified_count += 1
+            console.print(f"  [green][OK][/green] Verified {followup_verified_count} follow-up detail pages")
 
     console.print("\n[bold]Step 6:[/bold] Extracting and filtering...")
     opportunities, rejections = extract_all_with_rejections(
@@ -273,7 +275,11 @@ def run_research_pipeline(
             "profile": profile,
             "query_count": len(queries),
             "searched_urls": len(search_results),
-            "fetched_pages": len(pages),
+            "selected_urls": len(ranked_results),
+            "fetched_pages": len(pages) + followup_fetched_count,
+            "initial_fetched_pages": len(pages),
+            "followup_fetched_pages": followup_fetched_count,
+            "followup_verified_pages": followup_verified_count,
             "verified_pages": len(verified_pages),
         })
         return 0
@@ -300,7 +306,10 @@ def run_research_pipeline(
         "query_count": len(queries),
         "searched_urls": len(search_results),
         "selected_urls": len(ranked_results),
-        "fetched_pages": len(pages),
+        "fetched_pages": len(pages) + followup_fetched_count,
+        "initial_fetched_pages": len(pages),
+        "followup_fetched_pages": followup_fetched_count,
+        "followup_verified_pages": followup_verified_count,
         "verified_pages": len(verified_pages),
         "workers": workers,
         "timeout": timeout,
