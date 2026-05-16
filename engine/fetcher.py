@@ -186,75 +186,77 @@ def fetch_page(url: str, timeout: int = DEFAULT_TIMEOUT) -> Optional[RawPage]:
     if is_binary_url(url):
         return None
 
-    try:
-        response = requests.get(url, headers=HEADERS, timeout=timeout, allow_redirects=True)
+    for attempt in range(2):
+        try:
+            request_timeout = timeout if attempt == 0 else min(timeout * 2, 30)
+            response = requests.get(url, headers=HEADERS, timeout=request_timeout, allow_redirects=True)
 
-        content_type = response.headers.get("Content-Type", "")
-        if "text/html" not in content_type and "application/xhtml" not in content_type:
-            return None
+            content_type = response.headers.get("Content-Type", "")
+            if "text/html" not in content_type and "application/xhtml" not in content_type:
+                return None
 
-        html = response.text
-        status_code = response.status_code
-        title = extract_title_bs4(html)
-        platform = detect_platform(url)
-        page_type = classify_page(url, title or "")
-        fetch_method = "requests"
+            html = response.text
+            status_code = response.status_code
+            title = extract_title_bs4(html)
+            platform = detect_platform(url)
+            page_type = classify_page(url, title or "")
+            fetch_method = "requests"
 
-        needs_listing_render = platform in PLAYWRIGHT_LISTING_PLATFORMS and page_type == "listing"
-        needs_detail_render = platform in PLAYWRIGHT_DETAIL_PLATFORMS and page_type == "detail"
-        if needs_listing_render or needs_detail_render:
-            rendered_html = fetch_rendered_html(url)
-            if rendered_html:
-                html = rendered_html
-                status_code = 200
-                title = extract_title_bs4(html) or title
-                fetch_method = "playwright"
+            needs_listing_render = platform in PLAYWRIGHT_LISTING_PLATFORMS and page_type == "listing"
+            needs_detail_render = platform in PLAYWRIGHT_DETAIL_PLATFORMS and page_type == "detail"
+            if needs_listing_render or needs_detail_render:
+                rendered_html = fetch_rendered_html(url)
+                if rendered_html:
+                    html = rendered_html
+                    status_code = 200
+                    title = extract_title_bs4(html) or title
+                    fetch_method = "playwright"
 
-        # Known platforms: BS4 saja (cepat, 3-5x lebih cepat dari trafilatura)
-        if platform in KNOWN_PLATFORMS:
-            text = extract_text_bs4(html)
-        else:
-            # Generic: trafilatura first, fallback BS4
-            text = extract_text_trafilatura(html, url)
-            if not text:
+            # Known platforms: BS4 saja (cepat, 3-5x lebih cepat dari trafilatura)
+            if platform in KNOWN_PLATFORMS:
                 text = extract_text_bs4(html)
+            else:
+                # Generic: trafilatura first, fallback BS4
+                text = extract_text_trafilatura(html, url)
+                if not text:
+                    text = extract_text_bs4(html)
 
-        structured_text = extract_structured_text(html)
-        if structured_text:
-            text = f"{text or ''}\n{structured_text}".strip()
-        if not text:
-            text = ""
+            structured_text = extract_structured_text(html)
+            if structured_text:
+                text = f"{text or ''}\n{structured_text}".strip()
+            if not text:
+                text = ""
 
-        page_type = classify_page(url, title or "")
-        allow_short_spa_listing = (
-            platform in PLAYWRIGHT_PLATFORMS
-            and page_type == "listing"
-            and len(html) > 1000
-            and not is_blocked_text(text)
-            and status_code not in [401, 403, 429]
-        )
+            page_type = classify_page(url, title or "")
+            allow_short_spa_listing = (
+                platform in PLAYWRIGHT_PLATFORMS
+                and page_type == "listing"
+                and len(html) > 1000
+                and not is_blocked_text(text)
+                and status_code not in [401, 403, 429]
+            )
 
-        is_bad, reason = is_bad_page(title or "", text, status_code)
-        if is_bad and not allow_short_spa_listing:
-            return None
-        if allow_short_spa_listing and len(text.strip()) < 200:
-            text = f"{title or platform} listing page\n{text}".strip()
+            is_bad, reason = is_bad_page(title or "", text, status_code)
+            if is_bad and not allow_short_spa_listing:
+                return None
+            if allow_short_spa_listing and len(text.strip()) < 200:
+                text = f"{title or platform} listing page\n{text}".strip()
 
-        return RawPage(
-            url=url,
-            title=title,
-            text_content=text[:50000],
-            html_content=html,
-            status_code=status_code,
-            page_type=page_type,
-            source_platform=platform,
-            fetch_method=fetch_method,
-        )
+            return RawPage(
+                url=url,
+                title=title,
+                text_content=text[:50000],
+                html_content=html,
+                status_code=status_code,
+                page_type=page_type,
+                source_platform=platform,
+                fetch_method=fetch_method,
+            )
 
-    except requests.Timeout:
-        return None
-    except requests.RequestException:
-        return None
+        except (requests.Timeout, requests.RequestException):
+            continue
+
+    return None
 
 
 def fetch_all(
