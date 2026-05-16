@@ -18,6 +18,7 @@ from engine.extractor import (
     detect_duration,
     check_suspicious_role,
     extract_opportunity,
+    extract_opportunity_with_rejection,
     load_keywords,
 )
 
@@ -262,6 +263,35 @@ def test_extract_non_internship_rejected():
     print("[PASS] non-internship rejected")
 
 
+def test_extract_rejection_reason():
+    page = RawPage(
+        url="https://dealls.com/loker/kol-specialist~company",
+        title="KOL Specialist at Company",
+        text_content="We are looking for a KOL specialist to manage marketing.",
+        status_code=200, page_type="detail",
+    )
+    opp, rejection = extract_opportunity_with_rejection(page)
+    assert opp is None
+    assert rejection is not None
+    assert rejection.rejection_reason.startswith("not_internship")
+    assert rejection.url == page.url
+    print(f"[PASS] rejection reason -> {rejection.rejection_reason}")
+
+
+def test_extract_listing_rejection_reason():
+    page = RawPage(
+        url="https://dealls.com/loker",
+        title="Explore Jobs | Dealls",
+        text_content="Lowongan kerja di Indonesia",
+        status_code=200, page_type="listing",
+    )
+    opp, rejection = extract_opportunity_with_rejection(page)
+    assert opp is None
+    assert rejection is not None
+    assert rejection.rejection_reason == "listing_page"
+    print("[PASS] listing rejection reason")
+
+
 def test_extract_valid_intern():
     page = RawPage(
         url="https://dealls.com/loker/frontend-intern~pt-example",
@@ -355,6 +385,8 @@ if __name__ == "__main__":
 
     # Full extraction
     test_extract_non_internship_rejected()
+    test_extract_rejection_reason()
+    test_extract_listing_rejection_reason()
     test_extract_valid_intern()
     test_extract_architect_intern()
     test_listing_title_rejected()

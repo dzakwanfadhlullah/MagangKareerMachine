@@ -16,7 +16,7 @@ from urllib.parse import urlparse
 import yaml
 from rich.console import Console
 
-from engine.models import RawPage, Opportunity
+from engine.models import RawPage, Opportunity, RejectedCandidate
 
 console = Console()
 
@@ -365,9 +365,37 @@ def get_source_name(url: str) -> str:
     return urlparse(url).netloc.replace("www.", "")
 
 
+def build_rejected_candidate(
+    page: RawPage,
+    reason: str,
+    title: Optional[str] = None,
+    text: Optional[str] = None,
+    internship_confidence: int = 0,
+    role_confidence: int = 0,
+    score: int = 0,
+) -> RejectedCandidate:
+    """Build a compact rejected candidate record for audit."""
+    from engine.listing_parser import detect_platform
+
+    return RejectedCandidate(
+        url=page.url,
+        title=title if title is not None else page.title,
+        source_platform=page.source_platform or detect_platform(page.url),
+        page_type=page.page_type,
+        rejection_reason=reason,
+        internship_confidence=internship_confidence,
+        role_confidence=role_confidence,
+        score=score,
+        text_snippet=(text or page.text_content or "")[:1000],
+    )
+
+
 # === MAIN EXTRACTOR ===
 
-def extract_opportunity(page: RawPage, config_path: Optional[Path] = None) -> Optional[Opportunity]:
+def extract_opportunity_with_rejection(
+    page: RawPage,
+    config_path: Optional[Path] = None,
+) -> tuple[Optional[Opportunity], Optional[RejectedCandidate]]:
     """
     Extract opportunity with quality gates:
     1. Reject listing pages
@@ -385,16 +413,22 @@ def extract_opportunity(page: RawPage, config_path: Optional[Path] = None) -> Op
     # Gate 1: listing page
     page_type = page.page_type if page.page_type != "unknown" else classify_page(page.url, title)
     if page_type == "listing":
-        return None
+        return None, build_rejected_candidate(page, "listing_page", title=title)
     if is_listing_title(title):
-        return None
+        return None, build_rejected_candidate(page, "listing_title", title=title)
 
     text = page.text_content
 
     # Gate 2: Internship detection
     is_intern, intern_conf, intern_src = detect_internship(text, title, config)
     if not is_intern:
-        return None
+        return None, build_rejected_candidate(
+            page,
+            f"not_internship:{intern_src}",
+            title=title,
+            text=text,
+            internship_confidence=intern_conf,
+        )
 
     # Gate 3: Suspicious role check
     suspicious = check_suspicious_role(title, config)
@@ -454,25 +488,49 @@ def extract_opportunity(page: RawPage, config_path: Optional[Path] = None) -> Op
         role_confidence=role_conf,
         page_type="detail",
         extraction_status="extracted",
-    )
+    ), None
+
+
+def extract_opportunity(page: RawPage, config_path: Optional[Path] = None) -> Optional[Opportunity]:
+    """
+    Extract one opportunity.
+
+    Keeps the legacy API by returning None for rejected pages. Use
+    extract_opportunity_with_rejection for audit details.
+    """
+    opportunity, _ = extract_opportunity_with_rejection(page, config_path)
+    return opportunity
 
 
 def extract_all(pages: list[RawPage], config_path: Optional[Path] = None) -> list[Opportunity]:
     """Extract opportunities. Skip listing + non-internship pages."""
+    opportunities, _ = extract_all_with_rejections(pages, config_path)
+    return opportunities
+
+
+def extract_all_with_rejections(
+    pages: list[RawPage],
+    config_path: Optional[Path] = None,
+) -> tuple[list[Opportunity], list[RejectedCandidate]]:
+    """Extract opportunities and return rejected candidates for audit."""
     opportunities = []
+    rejections = []
     skipped = 0
 
     for page in pages:
         if page.page_type == "listing":
+            rejections.append(build_rejected_candidate(page, "listing_page"))
             skipped += 1
             continue
-        opp = extract_opportunity(page, config_path)
+        opp, rejection = extract_opportunity_with_rejection(page, config_path)
         if opp:
             opportunities.append(opp)
         else:
+            if rejection:
+                rejections.append(rejection)
             skipped += 1
 
     if skipped > 0:
         console.print(f"  [dim]Skipped {skipped} non-internship/irrelevant pages[/dim]")
     console.print(f"[green][OK][/green] Extracted {len(opportunities)} opportunities from {len(pages)} pages")
-    return opportunities
+    return opportunities, rejections

@@ -67,3 +67,16 @@ class Opportunity(BaseModel):
     extraction_status: str = "extracted"  # extracted | rejected
     rejection_reason: Optional[str] = None
 
+
+class RejectedCandidate(BaseModel):
+    """Halaman detail yang ditolak extractor/scorer untuk audit false negatives."""
+
+    url: str
+    title: Optional[str] = None
+    source_platform: Optional[str] = None
+    page_type: str = "detail"
+    rejection_reason: str
+    internship_confidence: int = 0
+    role_confidence: int = 0
+    score: int = 0
+    text_snippet: Optional[str] = None

@@ -12,6 +12,7 @@ Alur:
 from typing import Optional
 from rich.console import Console
 
+from engine.models import RawPage
 from engine.query_builder import build_queries_from_raw
 from engine.searcher import search_all, search_manual_sources
 from engine.fetcher import fetch_all, fetch_detail_urls
@@ -20,7 +21,7 @@ from engine.listing_parser import (
     classify_page,
     detect_platform,
 )
-from engine.extractor import extract_all, TITLE_INTERNSHIP_SIGNALS
+from engine.extractor import extract_all_with_rejections, build_rejected_candidate, TITLE_INTERNSHIP_SIGNALS
 from engine.scorer import score_all
 from engine.deduper import dedupe_opportunities
 from engine.db import (
@@ -29,6 +30,7 @@ from engine.db import (
     save_crawl_queue,
     mark_crawl_done,
     save_opportunity,
+    save_rejected_candidate,
     get_existing_urls,
 )
 from engine.exporter import export_all
@@ -104,7 +106,14 @@ def _cap_links_per_source(links: list[dict], max_per_source: int) -> list[dict]:
 def _stage2_process(detail_pages, min_score: int) -> int:
     """Stage 2: Extract -> Score -> Dedupe -> Save."""
     console.print("\n[bold]Extracting opportunities...[/bold]")
-    opportunities = extract_all(detail_pages)
+    opportunities, rejections = extract_all_with_rejections(detail_pages)
+
+    saved_rejections = 0
+    for rejection in rejections:
+        if save_rejected_candidate(rejection.model_dump()):
+            saved_rejections += 1
+    if saved_rejections:
+        console.print(f"  [dim]Saved {saved_rejections} rejected candidates for audit[/dim]")
 
     if not opportunities:
         console.print("[yellow][WARN][/yellow] No opportunities extracted")
@@ -112,6 +121,27 @@ def _stage2_process(detail_pages, min_score: int) -> int:
 
     console.print("\n[bold]Scoring...[/bold]")
     opportunities = score_all(opportunities)
+    low_score = [o for o in opportunities if o.score < min_score]
+    for opp in low_score:
+        rejection = build_rejected_candidate(
+            page=RawPage(
+                url=opp.source_url,
+                title=opp.title,
+                text_content=opp.raw_text or "",
+                html_content="",
+                status_code=200,
+                page_type=opp.page_type,
+                source_platform=opp.source_platform,
+            ),
+            reason="score_below_minimum",
+            title=opp.title,
+            text=opp.raw_text,
+            internship_confidence=opp.internship_confidence,
+            role_confidence=opp.role_confidence,
+            score=opp.score,
+        )
+        save_rejected_candidate(rejection.model_dump())
+
     opportunities = [o for o in opportunities if o.score >= min_score]
     console.print(f"  {len(opportunities)} with score >= {min_score}")
 

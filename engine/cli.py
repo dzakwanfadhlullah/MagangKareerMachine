@@ -6,7 +6,13 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from engine.db import init_db, get_all_opportunities, get_opportunity_count, reset_db
+from engine.db import (
+    init_db,
+    get_all_opportunities,
+    get_opportunity_count,
+    get_rejected_candidates,
+    reset_db,
+)
 from engine.pipeline import run_search_pipeline, run_crawl_sources
 from engine.exporter import export_all
 from engine.reporter import generate_report
@@ -113,6 +119,37 @@ def list_opportunities(
 
     console.print(table)
     console.print(f"\n[dim]Total in database: {get_opportunity_count()}[/dim]")
+
+
+@app.command(name="list-rejections")
+def list_rejections(
+    limit: int = typer.Option(30, "--limit", "-n", help="Jumlah rejected candidates"),
+):
+    """Tampilkan rejected candidates terbaru untuk audit false negatives."""
+    rows = get_rejected_candidates(limit)
+    if not rows:
+        console.print("[yellow]Belum ada rejected candidates.[/yellow]")
+        return
+
+    table = Table(title="Rejected Candidates", show_lines=False)
+    table.add_column("Reason", style="yellow", max_width=28)
+    table.add_column("Title", style="cyan", max_width=45)
+    table.add_column("Platform", max_width=12)
+    table.add_column("Intern", justify="right", width=6)
+    table.add_column("Role", justify="right", width=6)
+    table.add_column("Score", justify="right", width=6)
+
+    for row in rows:
+        table.add_row(
+            row.get("rejection_reason") or "-",
+            (row.get("title") or "-")[:45],
+            row.get("source_platform") or "-",
+            str(row.get("internship_confidence") or 0),
+            str(row.get("role_confidence") or 0),
+            str(row.get("score") or 0),
+        )
+
+    console.print(table)
 
 
 @app.command()

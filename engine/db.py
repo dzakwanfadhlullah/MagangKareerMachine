@@ -116,6 +116,23 @@ def init_db(db_path: Optional[str] = None) -> None:
         )
     """)
 
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS rejected_candidates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            url TEXT,
+            title TEXT,
+            source_platform TEXT,
+            page_type TEXT DEFAULT 'detail',
+            rejection_reason TEXT,
+            internship_confidence INTEGER DEFAULT 0,
+            role_confidence INTEGER DEFAULT 0,
+            score INTEGER DEFAULT 0,
+            text_snippet TEXT,
+            rejected_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(url, rejection_reason)
+        )
+    """)
+
     # FTS5 untuk full-text search lokal
     cursor.execute("""
         CREATE VIRTUAL TABLE IF NOT EXISTS opportunities_fts
@@ -304,6 +321,48 @@ def save_opportunity(opp: dict, db_path: Optional[str] = None) -> bool:
         conn.close()
 
 
+def save_rejected_candidate(candidate: dict, db_path: Optional[str] = None) -> bool:
+    """Simpan rejected candidate untuk audit false negatives."""
+    conn = get_connection(db_path)
+    try:
+        conn.execute(
+            """INSERT OR REPLACE INTO rejected_candidates
+            (url, title, source_platform, page_type, rejection_reason,
+             internship_confidence, role_confidence, score, text_snippet, rejected_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""",
+            (
+                candidate["url"],
+                candidate.get("title"),
+                candidate.get("source_platform"),
+                candidate.get("page_type", "detail"),
+                candidate["rejection_reason"],
+                candidate.get("internship_confidence", 0),
+                candidate.get("role_confidence", 0),
+                candidate.get("score", 0),
+                candidate.get("text_snippet"),
+            ),
+        )
+        conn.commit()
+        return True
+    except Exception:
+        return False
+    finally:
+        conn.close()
+
+
+def get_rejected_candidates(limit: int = 50, db_path: Optional[str] = None) -> list[dict]:
+    """Ambil rejected candidates terbaru untuk audit."""
+    conn = get_connection(db_path)
+    rows = conn.execute(
+        """SELECT * FROM rejected_candidates
+        ORDER BY rejected_at DESC
+        LIMIT ?""",
+        (limit,),
+    ).fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
 def get_all_opportunities(db_path: Optional[str] = None) -> list[dict]:
     """Ambil semua opportunities, urut berdasarkan score DESC."""
     conn = get_connection(db_path)
@@ -345,6 +404,7 @@ def reset_db(db_path: Optional[str] = None) -> None:
     conn.execute("DELETE FROM raw_pages")
     conn.execute("DELETE FROM crawl_queue")
     conn.execute("DELETE FROM opportunities")
+    conn.execute("DELETE FROM rejected_candidates")
     conn.execute("DELETE FROM opportunities_fts")
     conn.commit()
     conn.close()
