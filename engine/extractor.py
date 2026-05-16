@@ -101,6 +101,58 @@ ROLE_CATEGORY = {
     "Product Manager": "product",
 }
 
+ROLE_KEY_BY_DISPLAY = {
+    display.lower().replace("/", "_").replace(" ", "_"): key
+    for key, display in ROLE_DISPLAY.items()
+}
+
+TARGET_CATEGORY_ALIASES = {
+    "technology": "tech",
+    "engineering": "tech",
+    "software": "software_engineering",
+    "software_engineer": "software_engineering",
+    "software_engineering": "software_engineering",
+    "frontend_developer": "frontend",
+    "front_end": "frontend",
+    "backend_developer": "backend",
+    "back_end": "backend",
+    "fullstack_developer": "fullstack",
+    "full_stack": "fullstack",
+    "mobile_developer": "mobile",
+    "quality_assurance": "qa",
+    "it": "it_support",
+    "support": "it_support",
+    "business_intelligence": "business_intelligence",
+    "bi": "business_intelligence",
+    "machine_learning": "ai_ml",
+    "ml": "ai_ml",
+    "ai": "ai_ml",
+    "uiux": "ui_ux",
+    "ui_ux_designer": "ui_ux",
+    "product_manager": "product",
+    "actuary": "actuarial",
+    "aktuaria": "actuarial",
+}
+
+TOP_LEVEL_CATEGORIES = {"tech", "data", "actuarial", "design", "product"}
+
+SENIORITY_NON_INTERN_PATTERNS = [
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in [
+        r"\bsenior\b",
+        r"\bmanager\b",
+        r"\blead\b",
+        r"\bhead\b",
+        r"\bhead\s+of\b",
+        r"\bsupervisor\b",
+        r"\bprincipal\b",
+        r"\bdirector\b",
+        r"\bvp\b",
+        r"\bvice\s+president\b",
+        r"\bchief\b",
+    ]
+]
+
 
 def load_keywords(config_path: Optional[Path] = None) -> dict:
     """Load keyword config (nested structure)."""
@@ -114,6 +166,13 @@ def load_keywords(config_path: Optional[Path] = None) -> dict:
 def check_internship_title(title: str) -> bool:
     """Word-boundary check for internship in title."""
     return any(p.search(title) for p in _INTERN_PATTERNS)
+
+
+def title_has_seniority_without_internship(title: str) -> bool:
+    """Reject senior/managerial titles unless the title itself says intern/magang."""
+    if not title or check_internship_title(title):
+        return False
+    return any(pattern.search(title) for pattern in SENIORITY_NON_INTERN_PATTERNS)
 
 
 def detect_internship(text: str, title: str, config: dict) -> tuple[bool, int, str]:
@@ -139,6 +198,9 @@ def detect_internship(text: str, title: str, config: dict) -> tuple[bool, int, s
     for term in neg_likely:
         if term.lower() in title_lower:
             return False, 0, "likely_not_job"
+
+    if title_has_seniority_without_internship(title):
+        return False, 0, "seniority_without_internship_title"
 
     # Tier 1: Strong term in TITLE (word-boundary)
     if check_internship_title(title):
@@ -244,6 +306,42 @@ def detect_category(role: Optional[str]) -> Optional[str]:
     if not role:
         return None
     return ROLE_CATEGORY.get(role, None)
+
+
+def normalize_target_category(target_category: Optional[str]) -> Optional[str]:
+    """Normalize category/role target input from CLI into canonical label."""
+    if not target_category:
+        return None
+    target = target_category.strip().lower().replace("-", "_").replace(" ", "_")
+    if not target:
+        return None
+    if target in TARGET_CATEGORY_ALIASES:
+        return TARGET_CATEGORY_ALIASES[target]
+    if target in TOP_LEVEL_CATEGORIES or target in ROLE_DISPLAY:
+        return target
+    return ROLE_KEY_BY_DISPLAY.get(target, target)
+
+
+def _role_to_key(role: Optional[str]) -> Optional[str]:
+    if not role:
+        return None
+    normalized = role.strip().lower().replace("/", "_").replace("-", "_").replace(" ", "_")
+    return ROLE_KEY_BY_DISPLAY.get(normalized, normalized)
+
+
+def opportunity_matches_target(opp: Opportunity, target_category: Optional[str]) -> bool:
+    """
+    Check whether an opportunity matches a targeted crawl/search intent.
+
+    Target may be a top-level category (tech/data/actuarial/design/product)
+    or a role key (frontend/backend/data_analyst/mobile/etc).
+    """
+    target = normalize_target_category(target_category)
+    if not target:
+        return True
+    if target in TOP_LEVEL_CATEGORIES:
+        return opp.category == target
+    return _role_to_key(opp.role) == target
 
 
 # === LOCATION ===
@@ -528,11 +626,13 @@ def extract_all(pages: list[RawPage], config_path: Optional[Path] = None) -> lis
 def extract_all_with_rejections(
     pages: list[RawPage],
     config_path: Optional[Path] = None,
+    target_category: Optional[str] = None,
 ) -> tuple[list[Opportunity], list[RejectedCandidate]]:
     """Extract opportunities and return rejected candidates for audit."""
     opportunities = []
     rejections = []
     skipped = 0
+    normalized_target = normalize_target_category(target_category)
 
     for page in pages:
         if page.page_type == "listing":
@@ -541,6 +641,18 @@ def extract_all_with_rejections(
             continue
         opp, rejection = extract_opportunity_with_rejection(page, config_path)
         if opp:
+            if normalized_target and not opportunity_matches_target(opp, normalized_target):
+                rejections.append(build_rejected_candidate(
+                    page,
+                    f"out_of_scope_target:{normalized_target}",
+                    title=opp.title,
+                    text=opp.raw_text,
+                    internship_confidence=opp.internship_confidence,
+                    role_confidence=opp.role_confidence,
+                    score=opp.score,
+                ))
+                skipped += 1
+                continue
             opportunities.append(opp)
         else:
             if rejection:

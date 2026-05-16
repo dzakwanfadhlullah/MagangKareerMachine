@@ -205,12 +205,16 @@ def _cap_links_per_source(links: list[dict], max_per_source: int) -> list[dict]:
 def _stage2_process(
     detail_pages,
     min_score: int,
+    target_category: Optional[str] = None,
     diagnostics: Optional[dict[str, dict]] = None,
     detail_source_map: Optional[dict[str, str]] = None,
 ) -> int:
     """Stage 2: Extract -> Score -> Dedupe -> Save."""
     console.print("\n[bold]Extracting opportunities...[/bold]")
-    opportunities, rejections = extract_all_with_rejections(detail_pages)
+    opportunities, rejections = extract_all_with_rejections(
+        detail_pages,
+        target_category=target_category,
+    )
 
     saved_rejections = 0
     for rejection in rejections:
@@ -284,6 +288,7 @@ def run_crawl_sources(
     max_total_detail: int = 60,
     workers: int = 6,
     timeout: int = 10,
+    target_category: Optional[str] = None,
 ) -> int:
     """
     Crawl dari manual sources — 2-stage dengan limits.
@@ -377,6 +382,7 @@ def run_crawl_sources(
     saved = _stage2_process(
         detail_pages,
         min_score,
+        target_category=target_category,
         diagnostics=diagnostics,
         detail_source_map=detail_source_map,
     )
@@ -400,6 +406,7 @@ def run_search_pipeline(
     workers: int = 5,
     timeout: int = 10,
     query_limit: int = 3,
+    target_category: Optional[str] = None,
 ) -> int:
     """Pipeline pencarian lengkap — 2-stage dengan limits."""
     console.rule("[bold cyan]MagangKareer Search Pipeline[/bold cyan]")
@@ -462,7 +469,7 @@ def run_search_pipeline(
 
     # Stage 2
     console.print(f"\n[bold]Stage 2:[/bold] Processing {len(detail_pages)} detail pages...")
-    saved = _stage2_process(detail_pages, min_score)
+    saved = _stage2_process(detail_pages, min_score, target_category=target_category)
 
     console.print("\n[bold]Exporting...[/bold]")
     export_all()

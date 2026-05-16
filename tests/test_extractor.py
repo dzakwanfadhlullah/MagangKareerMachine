@@ -17,6 +17,7 @@ from engine.extractor import (
     detect_salary,
     detect_duration,
     check_suspicious_role,
+    extract_all_with_rejections,
     extract_opportunity,
     extract_opportunity_with_rejection,
     load_keywords,
@@ -79,6 +80,19 @@ def test_fulltime_no_intern_rejected():
     # Should not pass — no intern signal, has non_internship_term in desc
     assert ok is False or conf < 60, f"Should reject: ok={ok}, conf={conf}, src={src}"
     print("[PASS] full-time without intern rejected")
+
+
+def test_seniority_title_overrides_related_internship_noise():
+    """Senior title should not become internship because related jobs mention internship."""
+    config = load_keywords()
+    ok, conf, src = detect_internship(
+        "Senior Actuary role. Related jobs: actuarial internship, finance internship.",
+        "Senior Actuary",
+        config,
+    )
+    assert ok is False
+    assert conf == 0
+    assert src == "seniority_without_internship_title"
 
 
 # === ROLE CLASSIFICATION ===
@@ -384,6 +398,55 @@ def test_extract_architect_intern():
     assert opp.is_internship is True
     assert opp.role != "Backend Developer", f"Architect Intern should NOT be Backend, got {opp.role}"
     print(f"[PASS] Architect Intern -> role={opp.role} (not Backend)")
+
+
+def test_targeted_actuarial_filter_accepts_only_actuarial():
+    pages = [
+        RawPage(
+            url="https://glints.com/id/opportunities/jobs/pricing-valuation-actuary",
+            title="Pricing & Valuation Internship (Actuary)",
+            text_content="Internship program in reinsurance pricing valuation reserving IFRS 17.",
+            status_code=200,
+            page_type="detail",
+        ),
+        RawPage(
+            url="https://glints.com/id/opportunities/jobs/legal-intern",
+            title="Legal Internship",
+            text_content="Legal internship for contract review and corporate documents.",
+            status_code=200,
+            page_type="detail",
+        ),
+        RawPage(
+            url="https://glints.com/id/opportunities/jobs/senior-actuary",
+            title="Senior Actuary",
+            text_content="Senior actuary role. Related jobs: actuarial internship, internship program.",
+            status_code=200,
+            page_type="detail",
+        ),
+    ]
+
+    opportunities, rejections = extract_all_with_rejections(pages, target_category="actuarial")
+
+    assert len(opportunities) == 1
+    assert opportunities[0].title == "Pricing & Valuation Internship (Actuary)"
+    assert opportunities[0].category == "actuarial"
+
+    reasons = {r.title: r.rejection_reason for r in rejections}
+    assert reasons["Legal Internship"] == "out_of_scope_target:actuarial"
+    assert reasons["Senior Actuary"].startswith("not_internship:seniority_without_internship_title")
+
+
+def test_generic_mode_still_keeps_non_target_internships():
+    page = RawPage(
+        url="https://glints.com/id/opportunities/jobs/legal-intern",
+        title="Legal Internship",
+        text_content="Legal internship for contract review and corporate documents.",
+        status_code=200,
+        page_type="detail",
+    )
+    opportunities, rejections = extract_all_with_rejections([page])
+    assert len(opportunities) == 1
+    assert not rejections
 
 
 def test_listing_title_rejected():
