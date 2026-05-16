@@ -14,6 +14,9 @@ from engine.listing_parser import (
     KalibrrAdapter,
     GlintsAdapter,
     JobstreetAdapter,
+    LokerIdAdapter,
+    ProspleAdapter,
+    IndeedAdapter,
     GenericAdapter,
 )
 
@@ -23,6 +26,9 @@ def test_detect_platform():
     assert detect_platform("https://glints.com/id/en/find-jobs") == "glints"
     assert detect_platform("https://www.jobstreet.co.id/id/jobs") == "jobstreet"
     assert detect_platform("https://www.kalibrr.id/id-ID/job-board") == "kalibrr"
+    assert detect_platform("https://www.loker.id/tipe-pekerjaan/magang") == "lokerid"
+    assert detect_platform("https://id.prosple.com/lowongan-magang-indonesia") == "prosple"
+    assert detect_platform("https://id.indeed.com/q-internship-lowongan.html") == "indeed"
     assert detect_platform("https://random-site.com/jobs") == "generic"
     print("[PASS] detect_platform")
 
@@ -39,11 +45,16 @@ def test_is_listing_url():
     assert is_listing_url("https://glints.com/id/en/find-jobs/frontend") is True
     assert is_listing_url("https://www.kalibrr.id/id-ID/job-board") is True
     assert is_listing_url("https://www.jobstreet.co.id/id/frontend-developer-internship-jobs") is True
+    assert is_listing_url("https://www.loker.id/tipe-pekerjaan/magang") is True
+    assert is_listing_url("https://id.prosple.com/lowongan-magang-indonesia") is True
+    assert is_listing_url("https://id.indeed.com/q-internship-lowongan.html") is True
 
     # Detail URLs — NOT listing
     assert is_listing_url("https://dealls.com/loker/frontend-intern~pt-example") is False
     assert is_listing_url("https://glints.com/id/en/opportunities/jobs/frontend/123") is False
     assert is_listing_url("https://www.kalibrr.id/id-ID/c/company/jobs/123/slug") is False
+    assert is_listing_url("https://www.loker.id/lowongan-kerja/frontend-intern") is False
+    assert is_listing_url("https://id.indeed.com/viewjob?jk=abc123") is False
     print("[PASS] is_listing_url")
 
 
@@ -140,6 +151,42 @@ def test_jobstreet_adapter():
     print(f"[PASS] JobstreetAdapter -> {len(links)} links")
 
 
+def test_tier2_adapters():
+    loker_html = """
+    <html><body>
+        <a href="/lowongan-kerja/frontend-developer-intern">Frontend Intern</a>
+        <a href="/tipe-pekerjaan/magang">Magang listing</a>
+    </body></html>
+    """
+    loker_links = LokerIdAdapter().extract_detail_links(
+        "https://www.loker.id/tipe-pekerjaan/magang", loker_html
+    )
+    assert len(loker_links) == 1
+
+    prosple_html = """
+    <html><body>
+        <a href="/graduate-employers/example/jobs-internships/software-engineer-intern">Software Intern</a>
+        <a href="/lowongan-magang-indonesia">Listing</a>
+    </body></html>
+    """
+    prosple_links = ProspleAdapter().extract_detail_links(
+        "https://id.prosple.com/lowongan-magang-indonesia", prosple_html
+    )
+    assert len(prosple_links) == 1
+
+    indeed_html = """
+    <html><body>
+        <a href="/viewjob?jk=abc123">IT Intern</a>
+        <a href="/q-internship-lowongan.html">Listing</a>
+    </body></html>
+    """
+    indeed_links = IndeedAdapter().extract_detail_links(
+        "https://id.indeed.com/q-internship-lowongan.html", indeed_html
+    )
+    assert len(indeed_links) == 1
+    print("[PASS] Tier 2 adapters")
+
+
 if __name__ == "__main__":
     test_detect_platform()
     test_is_listing_url()
@@ -149,4 +196,5 @@ if __name__ == "__main__":
     test_kalibrr_adapter()
     test_glints_adapter()
     test_jobstreet_adapter()
+    test_tier2_adapters()
     print("\n[OK] All listing_parser tests passed!")

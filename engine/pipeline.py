@@ -215,10 +215,10 @@ def _stage2_process(detail_pages, min_score: int) -> int:
 
 def run_crawl_sources(
     min_score: int = 40,
-    max_sources: int = 7,
+    max_sources: int = 8,
     max_per_source: int = 10,
-    max_total_detail: int = 30,
-    workers: int = 5,
+    max_total_detail: int = 60,
+    workers: int = 6,
     timeout: int = 10,
 ) -> int:
     """

@@ -40,6 +40,9 @@ LISTING_URL_PATTERNS = [
     r"/search",
     r"/kategori",
     r"/category",
+    r"^/tipe-pekerjaan/magang",
+    r"^/lowongan-magang",
+    r"^/q-.*lowongan\.html",
 ]
 
 # Title listing yang TIDAK boleh jadi opportunity
@@ -66,6 +69,7 @@ def detect_platform(url: str) -> str:
         "jobstreet.com": "jobstreet",
         "kalibrr.id": "kalibrr",
         "kalibrr.com": "kalibrr",
+        "loker.id": "lokerid",
         "prosple.com": "prosple",
         "indeed.com": "indeed",
         "linkedin.com": "linkedin",
@@ -292,6 +296,118 @@ class JobstreetAdapter(PlatformAdapter):
         return links
 
 
+class LokerIdAdapter(PlatformAdapter):
+    """Loker.id — detail links usually include lowongan-kerja slugs."""
+
+    platform = "lokerid"
+
+    def extract_detail_links(self, url: str, html: str = "") -> list[DetailLink]:
+        if not html:
+            return []
+
+        soup = BeautifulSoup(html, "html.parser")
+        links = []
+        seen = set()
+
+        for a in soup.find_all("a", href=True):
+            href = a["href"]
+            full_url = urljoin("https://www.loker.id", href)
+            path = urlparse(full_url).path
+
+            if is_listing_url(full_url):
+                continue
+            if not re.search(r"/lowongan-kerja/|/jobs?/", path, re.IGNORECASE):
+                continue
+
+            if full_url in seen:
+                continue
+            seen.add(full_url)
+
+            links.append(DetailLink(
+                url=full_url,
+                title=a.get_text(strip=True) or None,
+                source_platform="lokerid",
+                listing_url=url,
+            ))
+
+        return links
+
+
+class ProspleAdapter(PlatformAdapter):
+    """Prosple — internship detail links commonly sit under jobs-internships."""
+
+    platform = "prosple"
+
+    def extract_detail_links(self, url: str, html: str = "") -> list[DetailLink]:
+        if not html:
+            return []
+
+        soup = BeautifulSoup(html, "html.parser")
+        links = []
+        seen = set()
+
+        for a in soup.find_all("a", href=True):
+            href = a["href"]
+            full_url = urljoin("https://id.prosple.com", href)
+            path = urlparse(full_url).path
+
+            if is_listing_url(full_url):
+                continue
+            if not re.search(r"/jobs-internships/|/job/|/graduate-employers/.+/jobs", path, re.IGNORECASE):
+                continue
+
+            if full_url in seen:
+                continue
+            seen.add(full_url)
+
+            links.append(DetailLink(
+                url=full_url,
+                title=a.get_text(strip=True) or None,
+                source_platform="prosple",
+                listing_url=url,
+            ))
+
+        return links
+
+
+class IndeedAdapter(PlatformAdapter):
+    """Indeed — detail links use /viewjob or redirect URLs with jk ids."""
+
+    platform = "indeed"
+
+    def extract_detail_links(self, url: str, html: str = "") -> list[DetailLink]:
+        if not html:
+            return []
+
+        soup = BeautifulSoup(html, "html.parser")
+        links = []
+        seen = set()
+
+        for a in soup.find_all("a", href=True):
+            href = a["href"]
+            full_url = urljoin("https://id.indeed.com", href)
+            parsed = urlparse(full_url)
+            target = f"{parsed.path}?{parsed.query}"
+
+            if is_listing_url(full_url):
+                continue
+            if not re.search(r"/viewjob\?|/rc/clk\?|[?&]jk=", target, re.IGNORECASE):
+                continue
+
+            if full_url in seen:
+                continue
+            seen.add(full_url)
+
+            links.append(DetailLink(
+                url=full_url,
+                title=a.get_text(strip=True) or None,
+                source_platform="indeed",
+                listing_url=url,
+            ))
+
+        return links
+
+
 class GenericAdapter(PlatformAdapter):
     """Fallback adapter — cari links yang terlihat seperti job detail."""
 
@@ -315,6 +431,9 @@ class GenericAdapter(PlatformAdapter):
             r"/position/",
             r"/opening/",
             r"/loker/[a-z0-9]",
+            r"/lowongan-kerja/",
+            r"/jobs-internships/",
+            r"/viewjob\?",
         ]
 
         for a in soup.find_all("a", href=True):
@@ -358,6 +477,9 @@ ADAPTERS: dict[str, PlatformAdapter] = {
     "kalibrr": KalibrrAdapter(),
     "glints": GlintsAdapter(),
     "jobstreet": JobstreetAdapter(),
+    "lokerid": LokerIdAdapter(),
+    "prosple": ProspleAdapter(),
+    "indeed": IndeedAdapter(),
     "generic": GenericAdapter(),
 }
 

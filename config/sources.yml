@@ -2,14 +2,93 @@ search:
   enabled: true
   max_results_per_query: 20
 
-manual_sources:
-  # SSR platforms first (fast, no Playwright needed)
-  - https://dealls.com/loker
-  - https://www.kalibrr.id/id-ID/job-board
-  # SPA platforms (listing/detail pages use Playwright fallback)
-  - https://glints.com/id/en/find-jobs/loker-front-end-developer-internship
-  - https://glints.com/id/en/find-jobs/loker-data-analyst-internship
-  # Jobstreet SPA (listing/detail pages use Playwright fallback)
-  - https://www.jobstreet.co.id/id/frontend-developer-internship-jobs
-  - https://www.jobstreet.co.id/id/data-analyst-internship-jobs
-  - https://www.jobstreet.co.id/id/software-engineer-internship-jobs
+crawl_profiles:
+  quick:
+    max_sources: 3
+    max_per_source: 5
+    max_total_detail: 15
+    workers: 5
+    timeout: 10
+  normal:
+    max_sources: 8
+    max_per_source: 10
+    max_total_detail: 60
+    workers: 6
+    timeout: 10
+  deep:
+    max_sources: 15
+    max_per_source: 20
+    max_total_detail: 150
+    workers: 8
+    timeout: 12
+
+sources:
+  tier_1:
+    - name: dealls_magang
+      platform: dealls
+      type: listing
+      url: https://dealls.com/loker/tipe/loker-magang
+
+    - name: glints_magang
+      platform: glints
+      type: listing
+      url: https://glints.com/id/en/find-jobs/loker-magang-internship
+
+    - name: glints_frontend_intern
+      platform: glints
+      type: listing
+      url: https://glints.com/id/en/find-jobs/loker-front-end-developer-internship
+
+    - name: glints_data_analyst_intern
+      platform: glints
+      type: listing
+      url: https://glints.com/id/en/find-jobs/loker-data-analyst-internship
+
+    - name: kalibrr_internship
+      platform: kalibrr
+      type: listing
+      url: https://www.kalibrr.id/id-ID/home/w/100-internship-or-ojt
+
+    - name: jobstreet_magang
+      platform: jobstreet
+      type: listing
+      url: https://www.jobstreet.co.id/id/internship-magang-jobs
+
+    - name: jobstreet_frontend_intern
+      platform: jobstreet
+      type: listing
+      url: https://www.jobstreet.co.id/id/frontend-developer-internship-jobs
+
+    - name: jobstreet_data_analyst_intern
+      platform: jobstreet
+      type: listing
+      url: https://www.jobstreet.co.id/id/data-analyst-internship-jobs
+
+    - name: jobstreet_software_engineer_intern
+      platform: jobstreet
+      type: listing
+      url: https://www.jobstreet.co.id/id/software-engineer-internship-jobs
+
+  tier_2:
+    - name: lokerid_magang
+      platform: lokerid
+      type: listing
+      url: https://www.loker.id/tipe-pekerjaan/magang
+
+    - name: prosple_internship
+      platform: prosple
+      type: listing
+      url: https://id.prosple.com/lowongan-magang-indonesia
+
+    - name: indeed_internship
+      platform: indeed
+      type: listing
+      url: https://id.indeed.com/q-internship-lowongan.html
+
+    - name: indeed_magang
+      platform: indeed
+      type: listing
+      url: https://id.indeed.com/q-magang-lowongan.html
+
+  # Reserved for company career pages, CDC kampus, and official programs.
+  tier_3: []

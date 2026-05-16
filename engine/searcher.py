@@ -22,6 +22,54 @@ def load_sources(config_path: Optional[Path] = None) -> dict:
         return yaml.safe_load(f)
 
 
+def load_crawl_profiles(config_path: Optional[Path] = None) -> dict:
+    """Load crawl profile presets from sources config."""
+    config = load_sources(config_path)
+    return config.get("crawl_profiles", {})
+
+
+def get_crawl_profile(profile: str, config_path: Optional[Path] = None) -> dict:
+    """Return a named crawl profile, raising a friendly error if missing."""
+    profiles = load_crawl_profiles(config_path)
+    if profile not in profiles:
+        available = ", ".join(sorted(profiles)) or "-"
+        raise ValueError(f"Unknown crawl profile '{profile}'. Available: {available}")
+    return profiles[profile]
+
+
+def iter_manual_source_entries(config: dict) -> list[dict]:
+    """
+    Flatten manual source config.
+
+    Supports the legacy manual_sources list and the new tiered sources format.
+    """
+    entries: list[dict] = []
+
+    legacy_urls = config.get("manual_sources", [])
+    for url in legacy_urls:
+        domain = urlparse(url).netloc
+        entries.append({
+            "name": f"manual_{domain}",
+            "platform": None,
+            "type": "listing",
+            "url": url,
+            "tier": "legacy",
+        })
+
+    tiered = config.get("sources", {})
+    if isinstance(tiered, dict):
+        for tier_name in sorted(tiered):
+            tier_entries = tiered.get(tier_name) or []
+            for item in tier_entries:
+                if not isinstance(item, dict) or not item.get("url"):
+                    continue
+                item = dict(item)
+                item["tier"] = tier_name
+                entries.append(item)
+
+    return entries
+
+
 def search_web(queries: list[str], max_results: int = 20) -> list[RawSearchResult]:
     """
     Cari di web menggunakan DuckDuckGo Search.
@@ -77,17 +125,22 @@ def search_manual_sources(config_path: Optional[Path] = None) -> list[RawSearchR
     Generate RawSearchResult dari manual seed URLs di sources.yml.
     """
     config = load_sources(config_path)
-    manual_urls = config.get("manual_sources", [])
+    manual_sources = iter_manual_source_entries(config)
     results = []
 
-    for url in manual_urls:
+    for item in manual_sources:
+        url = item["url"]
         domain = urlparse(url).netloc
+        name = item.get("name") or domain
+        platform = item.get("platform")
+        tier = item.get("tier") or "manual"
         result = RawSearchResult(
-            query="manual_source",
-            title=f"Manual source: {domain}",
-            snippet=None,
+            query=f"manual_source:{tier}",
+            title=f"Manual source: {name}",
+            snippet=f"{tier} | {platform or domain}",
             url=url,
             source="manual",
+            source_platform=platform,
         )
         results.append(result)
 

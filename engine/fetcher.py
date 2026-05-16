@@ -156,7 +156,7 @@ def fetch_rendered_html(url: str, wait_ms: int = 3000) -> Optional[str]:
     try:
         from playwright.sync_api import sync_playwright
 
-        console.print(f"  [magenta][PW][/magenta] Rendering detail: {url}")
+        console.print(f"  [magenta][PW][/magenta] Rendering JS page: {url}")
         with sync_playwright() as p:
             browser = p.chromium.launch(headless=True)
             page = browser.new_page(user_agent=HEADERS["User-Agent"])
@@ -192,7 +192,7 @@ def fetch_page(url: str, timeout: int = DEFAULT_TIMEOUT) -> Optional[RawPage]:
         platform = detect_platform(url)
         page_type = classify_page(url, title or "")
 
-        if platform in PLAYWRIGHT_PLATFORMS and page_type == "detail":
+        if platform in PLAYWRIGHT_PLATFORMS and page_type in {"listing", "detail"}:
             rendered_html = fetch_rendered_html(url)
             if rendered_html:
                 html = rendered_html

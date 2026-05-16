@@ -17,6 +17,7 @@ from engine.pipeline import run_search_pipeline, run_crawl_sources
 from engine.exporter import export_all
 from engine.reporter import generate_report
 from engine.evaluator import evaluate_dataset, print_eval_report
+from engine.searcher import get_crawl_profile
 
 console = Console()
 app = typer.Typer(
@@ -61,16 +62,32 @@ def search(
 
 @app.command(name="crawl-sources")
 def crawl_sources(
+    profile: str = typer.Option("normal", "--profile", help="Crawl profile: quick, normal, deep"),
     min_score: int = typer.Option(40, "--min-score", help="Minimum score"),
-    max_sources: int = typer.Option(7, "--max-sources", help="Max listing sources to crawl"),
-    max_per_source: int = typer.Option(10, "--max-per-source", help="Max detail links per platform"),
-    max_total_detail: int = typer.Option(30, "--max-total-detail", help="Max total detail pages"),
-    workers: int = typer.Option(5, "--workers", help="Concurrent fetch workers (1-8)"),
-    timeout: int = typer.Option(10, "--timeout", help="Fetch timeout per page (seconds)"),
+    max_sources: Optional[int] = typer.Option(None, "--max-sources", help="Override max listing sources"),
+    max_per_source: Optional[int] = typer.Option(None, "--max-per-source", help="Override max detail links per platform"),
+    max_total_detail: Optional[int] = typer.Option(None, "--max-total-detail", help="Override max total detail pages"),
+    workers: Optional[int] = typer.Option(None, "--workers", help="Override concurrent fetch workers (1-8)"),
+    timeout: Optional[int] = typer.Option(None, "--timeout", help="Override fetch timeout per page (seconds)"),
 ):
     """Crawl dari manual sources di config/sources.yml."""
+    try:
+        profile_cfg = get_crawl_profile(profile)
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(code=1)
+
+    max_sources = max_sources if max_sources is not None else profile_cfg.get("max_sources", 8)
+    max_per_source = max_per_source if max_per_source is not None else profile_cfg.get("max_per_source", 10)
+    max_total_detail = max_total_detail if max_total_detail is not None else profile_cfg.get("max_total_detail", 60)
+    workers = workers if workers is not None else profile_cfg.get("workers", 6)
+    timeout = timeout if timeout is not None else profile_cfg.get("timeout", 10)
     workers = min(workers, 8)
     init_db()
+    console.print(
+        f"[dim]Profile {profile}: sources={max_sources}, per_source={max_per_source}, "
+        f"total_detail={max_total_detail}, workers={workers}, timeout={timeout}s[/dim]"
+    )
     run_crawl_sources(
         min_score=min_score,
         max_sources=max_sources,
