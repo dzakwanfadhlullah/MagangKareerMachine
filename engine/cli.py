@@ -18,6 +18,8 @@ from engine.pipeline import run_search_pipeline, run_crawl_sources
 from engine.exporter import export_all
 from engine.reporter import generate_report
 from engine.evaluator import evaluate_dataset, print_eval_report
+from engine.research.research_pipeline import run_research_pipeline
+from engine.research.profiles import get_research_profile
 from engine.searcher import get_crawl_profile
 from engine.models import Opportunity
 
@@ -35,6 +37,47 @@ def init():
     console.print("[bold]Initializing MagangKareer Engine...[/bold]")
     init_db()
     console.print("[green]Ready![/green]")
+
+
+@app.command()
+def research(
+    query: Optional[str] = typer.Option(None, "--query", "-q", help="Keyword pencarian"),
+    location: str = typer.Option("Indonesia", "--location", "-l", help="Lokasi target"),
+    target_category: Optional[str] = typer.Option(
+        None,
+        "--target-category",
+        help="Target category/role, e.g. tech, frontend, backend, fullstack, actuarial",
+    ),
+    profile: str = typer.Option("normal", "--profile", help="Research profile: fast, normal, deep"),
+    min_score: int = typer.Option(40, "--min-score", help="Minimum score"),
+    query_count: Optional[int] = typer.Option(None, "--query-count", help="Override jumlah search queries"),
+    max_fetch: Optional[int] = typer.Option(None, "--max-fetch", help="Override jumlah top URLs untuk fetch"),
+    workers: Optional[int] = typer.Option(None, "--workers", help="Override concurrent fetch/search workers"),
+    timeout: Optional[int] = typer.Option(None, "--timeout", help="Override fetch timeout per page"),
+    results_per_query: Optional[int] = typer.Option(None, "--results-per-query", help="Override search hits per query"),
+):
+    """Fast research mode: search-index-first direct URL discovery."""
+    if not query and not target_category:
+        console.print("[red]Isi --query atau --target-category.[/red]")
+        raise typer.Exit(code=1)
+    try:
+        get_research_profile(profile)
+    except ValueError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(code=1)
+
+    run_research_pipeline(
+        query=query,
+        location=location,
+        target_category=target_category,
+        profile=profile,
+        query_count=query_count,
+        max_fetch=max_fetch,
+        workers=workers,
+        timeout=timeout,
+        min_score=min_score,
+        results_per_query=results_per_query,
+    )
 
 
 @app.command()
