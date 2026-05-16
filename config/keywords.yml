@@ -34,6 +34,77 @@ non_internship_terms:
   - coordinator
 
 role_keywords:
+  software_engineering:
+    strong_titles:
+      - software engineer intern
+      - software engineering intern
+      - software developer intern
+      - developer intern
+      - programmer intern
+      - application developer intern
+      - technology intern
+      - tech intern
+      - it intern
+      - it developer intern
+      - technical intern
+
+    supporting_skills:
+      - software engineering
+      - software development
+      - programming
+      - coding
+      - application development
+      - web development
+      - api
+      - database
+      - git
+      - github
+      - javascript
+      - typescript
+      - python
+      - java
+      - php
+      - go
+      - sql
+      - oop
+      - debugging
+
+    exclude_titles:
+      - frontend developer
+      - front-end developer
+      - front end developer
+      - backend developer
+      - back-end developer
+      - back end developer
+      - fullstack developer
+      - full-stack developer
+      - full stack developer
+      - mobile developer
+      - android developer
+      - ios developer
+      - flutter developer
+      - react native developer
+      - data analyst
+      - data engineer
+      - machine learning
+      - ai engineer
+      - qa intern
+      - quality assurance
+      - software tester
+      - it support
+      - business intelligence
+      - sales developer
+      - business developer
+      - business development
+      - property developer
+      - land developer
+      - content developer
+      - curriculum developer
+      - learning developer
+      - architect intern
+      - graphic designer
+      - kol specialist
+
   frontend:
     strong_titles:
       - frontend developer
@@ -217,6 +288,74 @@ role_keywords:
       - admin
       - social media
 
+  qa:
+    strong_titles:
+      - qa intern
+      - quality assurance intern
+      - software tester intern
+      - test engineer intern
+      - qa engineer intern
+      - manual tester intern
+      - automation tester intern
+
+    supporting_skills:
+      - quality assurance
+      - software testing
+      - manual testing
+      - automation testing
+      - test case
+      - test plan
+      - bug report
+      - regression testing
+      - selenium
+      - cypress
+      - playwright
+      - postman
+      - jira
+      - api testing
+
+    exclude_titles:
+      - quality control
+      - qc inspector
+      - food quality
+      - warehouse quality
+      - production quality
+      - content quality
+      - call quality
+
+  it_support:
+    strong_titles:
+      - it support intern
+      - helpdesk intern
+      - help desk intern
+      - technical support intern
+      - system support intern
+      - network support intern
+      - desktop support intern
+
+    supporting_skills:
+      - troubleshooting
+      - helpdesk
+      - help desk
+      - technical support
+      - windows
+      - linux
+      - network
+      - router
+      - switch
+      - hardware
+      - software installation
+      - ticketing
+      - active directory
+      - printer
+
+    exclude_titles:
+      - customer support
+      - sales support
+      - admin support
+      - operations support
+      - support staff
+
   data_analyst:
     strong_titles:
       - data analyst
@@ -268,6 +407,38 @@ role_keywords:
       - kol specialist
       - affiliate marketing
       - host livestreaming
+
+  business_intelligence:
+    strong_titles:
+      - business intelligence intern
+      - bi intern
+      - dashboard intern
+      - reporting intern
+      - business intelligence analyst intern
+      - bi analyst intern
+      - data reporting intern
+
+    supporting_skills:
+      - business intelligence
+      - dashboard
+      - reporting
+      - sql
+      - power bi
+      - tableau
+      - looker studio
+      - metabase
+      - data visualization
+      - data warehouse
+      - excel
+      - kpi
+      - metrics
+
+    exclude_titles:
+      - business development
+      - business intern
+      - sales reporting
+      - finance reporting officer
+      - admin reporting
 
   data_engineer:
     strong_titles:

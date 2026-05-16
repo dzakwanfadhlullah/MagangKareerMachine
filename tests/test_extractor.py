@@ -139,6 +139,42 @@ def test_role_mobile():
     print(f"[PASS] Android Developer Intern -> {role} (conf={conf})")
 
 
+def test_role_software_engineering_generic():
+    config = load_keywords()
+    role, conf = detect_role("Software Engineer Intern", "Python API SQL Git", config)
+    assert role == "Software Engineering", f"Expected Software Engineering, got {role}"
+    assert conf >= 70
+
+    role2, conf2 = detect_role("IT Intern", "Programming, database, debugging, Git", config)
+    assert role2 == "Software Engineering", f"Expected Software Engineering, got {role2}"
+    assert conf2 >= 70
+    print(f"[PASS] generic software roles -> {role}, {role2}")
+
+
+def test_role_qa_it_support_bi():
+    config = load_keywords()
+    qa_role, qa_conf = detect_role("QA Intern", "Test case, bug report, Postman API testing", config)
+    assert qa_role == "Quality Assurance", f"Expected Quality Assurance, got {qa_role}"
+    assert qa_conf >= 70
+
+    support_role, support_conf = detect_role(
+        "IT Support Intern",
+        "Troubleshooting Windows network hardware ticketing",
+        config,
+    )
+    assert support_role == "IT Support", f"Expected IT Support, got {support_role}"
+    assert support_conf >= 70
+
+    bi_role, bi_conf = detect_role(
+        "Business Intelligence Intern",
+        "SQL Power BI dashboard reporting KPI metrics",
+        config,
+    )
+    assert bi_role == "Business Intelligence", f"Expected Business Intelligence, got {bi_role}"
+    assert bi_conf >= 70
+    print("[PASS] QA, IT Support, and BI roles")
+
+
 # === FALSE POSITIVE PREVENTION ===
 
 def test_kol_not_actuarial():
@@ -364,6 +400,8 @@ if __name__ == "__main__":
     test_role_ui_ux()
     test_role_product()
     test_role_mobile()
+    test_role_software_engineering_generic()
+    test_role_qa_it_support_bi()
 
     # False positive prevention
     test_kol_not_actuarial()

@@ -68,11 +68,15 @@ TITLE_INTERNSHIP_SIGNALS = [
 ]
 
 ROLE_DISPLAY = {
+    "software_engineering": "Software Engineering",
     "frontend": "Frontend Developer",
     "backend": "Backend Developer",
     "fullstack": "Fullstack Developer",
     "mobile": "Mobile Developer",
+    "qa": "Quality Assurance",
+    "it_support": "IT Support",
     "data_analyst": "Data Analyst",
+    "business_intelligence": "Business Intelligence",
     "data_engineer": "Data Engineer",
     "ai_ml": "AI/ML Engineer",
     "actuarial": "Actuarial",
@@ -81,11 +85,15 @@ ROLE_DISPLAY = {
 }
 
 ROLE_CATEGORY = {
+    "Software Engineering": "tech",
     "Frontend Developer": "tech",
     "Backend Developer": "tech",
     "Fullstack Developer": "tech",
     "Mobile Developer": "tech",
+    "Quality Assurance": "tech",
+    "IT Support": "tech",
     "Data Analyst": "data",
+    "Business Intelligence": "data",
     "Data Engineer": "data",
     "AI/ML Engineer": "data",
     "Actuarial": "actuarial",

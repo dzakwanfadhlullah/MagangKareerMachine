@@ -60,10 +60,14 @@ def _normalize_role(value: object) -> Optional[str]:
         return None
     aliases = {
         "frontend_developer": "frontend",
+        "software_engineering": "software_engineering",
         "backend_developer": "backend",
         "fullstack_developer": "fullstack",
         "mobile_developer": "mobile",
+        "quality_assurance": "qa",
+        "it_support": "it_support",
         "data_analyst": "data_analyst",
+        "business_intelligence": "business_intelligence",
         "data_engineer": "data_engineer",
         "ai/ml_engineer": "ai_ml",
         "ai_ml_engineer": "ai_ml",
