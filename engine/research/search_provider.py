@@ -1,6 +1,7 @@
 """Parallel search providers for fast research mode."""
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import time
 from typing import Protocol
 
 from rich.console import Console
@@ -25,19 +26,44 @@ class DuckDuckGoProvider:
     """DuckDuckGo Search provider using duckduckgo_search/DDGS."""
 
     name = "ddgs"
+    backends = ("auto", "html", "lite")
+
+    def _ddgs_class(self):
+        try:
+            from ddgs import DDGS  # type: ignore
+            return DDGS
+        except ImportError:
+            try:
+                from duckduckgo_search import DDGS  # type: ignore
+                return DDGS
+            except ImportError:
+                return None
 
     def search(self, query: str, max_results: int) -> list[RawSearchResult]:
-        try:
-            from duckduckgo_search import DDGS
-        except ImportError:
-            console.print("[yellow][WARN][/yellow] duckduckgo-search not installed, skipping web search")
+        ddgs_class = self._ddgs_class()
+        if ddgs_class is None:
+            console.print("[yellow][WARN][/yellow] ddgs/duckduckgo-search not installed, skipping web search")
             return []
 
-        try:
-            hits = DDGS().text(query, max_results=max_results)
-        except Exception as e:
-            console.print(f"  [red][ERR][/red] Search failed for '{query}': {e}")
-            return []
+        hits = []
+        errors = []
+        for backend in self.backends:
+            try:
+                hits = ddgs_class().text(
+                    query,
+                    region="id-id",
+                    safesearch="moderate",
+                    backend=backend,
+                    max_results=max_results,
+                )
+                if hits:
+                    break
+            except Exception as e:
+                errors.append(f"{backend}: {e}")
+                time.sleep(0.25)
+
+        if not hits and errors:
+            console.print(f"  [red][ERR][/red] Search failed for '{query}': {' | '.join(errors[:2])}")
 
         results = []
         for hit in hits:

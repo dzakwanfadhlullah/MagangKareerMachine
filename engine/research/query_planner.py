@@ -127,9 +127,21 @@ def plan_research_queries(
         terms = [query]
 
     planned = []
+    has_user_query = bool(query and query.strip())
+    if has_user_query:
+        planned.append(f'"{query.strip()}" "{location}"')
+
+        # Fast profiles only run a small number of queries, so put site-specific
+        # direct-detail searches before broad generic expansions.
+        for term in terms[:4]:
+            for template in SITE_TEMPLATES:
+                planned.append(template.format(term=term, location=location))
+
     for term in terms:
         planned.append(f'"{term}" "{location}"')
-    for term in terms:
+
+    site_terms = terms[4:] if has_user_query else terms[:4]
+    for term in site_terms:
         for template in SITE_TEMPLATES:
             planned.append(template.format(term=term, location=location))
     for term in terms:
