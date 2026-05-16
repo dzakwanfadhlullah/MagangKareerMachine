@@ -76,3 +76,41 @@ def test_url_ranker_prefers_direct_intern_detail():
     assert is_direct_detail_url(direct.url)
     assert score_research_url(direct, target_category="tech") > score_research_url(listing, target_category="tech")
     assert rank_research_results([listing, direct], target_category="tech", max_urls=1) == [direct]
+
+
+def test_url_ranker_rejects_search_result_pages():
+    jobstreet_listing = RawSearchResult(
+        query="q",
+        title="Backend Developer Internship Jobs in Indonesia",
+        snippet="41 backend developer internship jobs",
+        url="https://id.jobstreet.com/backend-developer-internship-jobs",
+        source="fake",
+        page_type="unknown",
+        source_platform="jobstreet",
+    )
+    linkedin_listing = RawSearchResult(
+        query="q",
+        title="5 pekerjaan Internship Back End Developer di Indonesia",
+        snippet="Dapatkan pemberitahuan pekerjaan",
+        url="https://id.linkedin.com/jobs/internship-back-end-developer-jobs",
+        source="fake",
+        page_type="unknown",
+        source_platform="linkedin",
+    )
+    linkedin_detail = RawSearchResult(
+        query="q",
+        title="Back End Developer Intern",
+        snippet="Internship",
+        url="https://id.linkedin.com/jobs/view/back-end-developer-intern-at-zettabyte-pte-ltd-4415300468",
+        source="fake",
+        page_type="detail",
+        source_platform="linkedin",
+    )
+
+    ranked = rank_research_results(
+        [jobstreet_listing, linkedin_listing, linkedin_detail],
+        target_category="tech",
+        max_urls=10,
+    )
+
+    assert ranked == [linkedin_detail]

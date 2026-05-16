@@ -13,9 +13,12 @@ DIRECT_DETAIL_PATTERNS = [
     r"kalibrr\.(?:id|com)/.*/c/.+/jobs/\d+/",
     r"jobstreet\.co\.id/.*/job/",
     r"prosple\.com/.*/(?:jobs-internships|graduate-jobs-internships|job)/",
-    r"/job/",
-    r"/jobs/",
-    r"/careers?/",
+    r"linkedin\.com/jobs/view/",
+    r"indeed\.com/.*/viewjob\?",
+    r"loker\.id/.*/lowongan-kerja/",
+    r"/careers?/.+",
+    r"/jobs?/(?:view/)?\d+",
+    r"/jobs?/[a-z0-9][a-z0-9-]+(?:[?#]|$)",
 ]
 
 BAD_PATH_PATTERNS = [
@@ -28,6 +31,15 @@ BAD_PATH_PATTERNS = [
     r"/kelas",
     r"/login",
     r"/signup",
+]
+
+RESEARCH_LISTING_URL_PATTERNS = [
+    r"jobstreet\.[^/]+/[^?#]*-jobs(?:[?#]|$)",
+    r"linkedin\.com/jobs/(?!view/)[^?#]*-jobs(?:[?#]|$)",
+    r"jora\.com/lowongan-[^?#]*-di-[^?#]+",
+    r"indeed\.[^/]+/q-[^?#]*lowongan",
+    r"/jobs/search",
+    r"/jobs/(?:search|collections|people|recommended)",
 ]
 
 SOURCE_QUALITY = {
@@ -55,7 +67,9 @@ def is_bad_research_url(url: str) -> bool:
     if not parsed.scheme.startswith("http") or not parsed.netloc:
         return True
     lowered = url.lower()
-    return any(re.search(pattern, lowered) for pattern in BAD_PATH_PATTERNS)
+    if any(re.search(pattern, lowered) for pattern in BAD_PATH_PATTERNS):
+        return True
+    return any(re.search(pattern, lowered) for pattern in RESEARCH_LISTING_URL_PATTERNS)
 
 
 def score_research_url(result: RawSearchResult, target_category: str | None = None) -> int:
