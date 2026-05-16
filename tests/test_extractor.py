@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from engine.models import RawPage
 from engine.extractor import (
     check_internship_title,
+    check_targeted_internship_title,
     detect_internship,
     detect_role,
     detect_category,
@@ -93,6 +94,27 @@ def test_seniority_title_overrides_related_internship_noise():
     assert ok is False
     assert conf == 0
     assert src == "seniority_without_internship_title"
+
+
+def test_prior_internship_requirement_does_not_make_job_an_internship():
+    config = load_keywords()
+    ok, conf, src = detect_internship(
+        """
+        You will be an entry level member of the actuarial team.
+        What you bring: 0-1 years experience required; prior internship(s).
+        Four-year degree required in Actuarial science.
+        """,
+        "Actuarial Analyst - Profitability Management",
+        config,
+    )
+    assert ok is False
+    assert src == "no_signal"
+
+
+def test_targeted_internship_title_gate():
+    assert check_targeted_internship_title("Actuarial Intern") is True
+    assert check_targeted_internship_title("Actuarial Trainee") is True
+    assert check_targeted_internship_title("Actuarial Analyst") is False
 
 
 # === ROLE CLASSIFICATION ===
@@ -434,6 +456,25 @@ def test_targeted_actuarial_filter_accepts_only_actuarial():
     reasons = {r.title: r.rejection_reason for r in rejections}
     assert reasons["Legal Internship"] == "out_of_scope_target:actuarial"
     assert reasons["Senior Actuary"].startswith("not_internship:seniority_without_internship_title")
+
+
+def test_targeted_actuarial_rejects_non_internship_actuarial_analyst():
+    page = RawPage(
+        url="https://internal-careers.allianz.com/job/actuarial-analyst/1",
+        title="Actuarial Analyst - Profitability Management",
+        text_content="""
+        Entry level actuarial role. What you bring: 0-1 years experience required;
+        prior internship(s). Four-year degree required in Actuarial science.
+        """,
+        status_code=200,
+        page_type="detail",
+    )
+
+    opportunities, rejections = extract_all_with_rejections([page], target_category="actuarial")
+
+    assert opportunities == []
+    assert rejections
+    assert rejections[0].rejection_reason.startswith("not_internship")
 
 
 def test_generic_mode_still_keeps_non_target_internships():

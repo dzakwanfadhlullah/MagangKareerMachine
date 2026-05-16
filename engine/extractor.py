@@ -61,6 +61,19 @@ _INTERN_PATTERNS = [
     re.compile(r"\bco-op\b", re.IGNORECASE),
 ]
 
+_TARGET_TITLE_INTERNSHIP_PATTERNS = _INTERN_PATTERNS + [
+    re.compile(r"\btrainee\b", re.IGNORECASE),
+    re.compile(r"\bojt\b", re.IGNORECASE),
+    re.compile(r"\bpkl\b", re.IGNORECASE),
+    re.compile(r"\bpraktik\s+kerja\b", re.IGNORECASE),
+]
+
+_PRIOR_INTERNSHIP_CONTEXT = re.compile(
+    r"\b(?:prior|previous|past|relevant|required|preferred)\s+internship(?:s)?\b"
+    r"|\binternship(?:s)?\s+(?:experience|required|preferred)\b",
+    re.IGNORECASE,
+)
+
 # For early filter in pipeline (substring OK for speed)
 TITLE_INTERNSHIP_SIGNALS = [
     "intern", "internship", "magang", "trainee", "apprentice",
@@ -168,6 +181,16 @@ def check_internship_title(title: str) -> bool:
     return any(p.search(title) for p in _INTERN_PATTERNS)
 
 
+def check_targeted_internship_title(title: str) -> bool:
+    """Title-level internship check for targeted user-facing searches."""
+    return any(p.search(title) for p in _TARGET_TITLE_INTERNSHIP_PATTERNS)
+
+
+def _is_prior_internship_requirement(text: str, match_start: int, match_end: int) -> bool:
+    window = text[max(0, match_start - 60):match_end + 60]
+    return bool(_PRIOR_INTERNSHIP_CONTEXT.search(window))
+
+
 def title_has_seniority_without_internship(title: str) -> bool:
     """Reject senior/managerial titles unless the title itself says intern/magang."""
     if not title or check_internship_title(title):
@@ -210,7 +233,8 @@ def detect_internship(text: str, title: str, config: dict) -> tuple[bool, int, s
     strong_count = 0
     for term in strong_terms:
         pattern = re.compile(r"\b" + re.escape(term) + r"\b", re.IGNORECASE)
-        if pattern.search(text_lower):
+        match = pattern.search(text_lower)
+        if match and not _is_prior_internship_requirement(text_lower, match.start(), match.end()):
             strong_count += 1
 
     # Extra strong signals
@@ -641,6 +665,18 @@ def extract_all_with_rejections(
             continue
         opp, rejection = extract_opportunity_with_rejection(page, config_path)
         if opp:
+            if normalized_target and not check_targeted_internship_title(opp.title):
+                rejections.append(build_rejected_candidate(
+                    page,
+                    "not_internship:target_title_missing_internship",
+                    title=opp.title,
+                    text=opp.raw_text,
+                    internship_confidence=opp.internship_confidence,
+                    role_confidence=opp.role_confidence,
+                    score=opp.score,
+                ))
+                skipped += 1
+                continue
             if normalized_target and not opportunity_matches_target(opp, normalized_target):
                 rejections.append(build_rejected_candidate(
                     page,
