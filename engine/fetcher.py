@@ -6,7 +6,9 @@ Optimisasi:
 - Configurable timeout dan workers
 """
 
+import json
 import os
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Optional
 from urllib.parse import urlparse
@@ -24,6 +26,7 @@ DEFAULT_WORKERS = int(os.getenv("FETCH_WORKERS", "5"))
 
 # Platform yang HTML-nya bisa langsung di-parse BS4 tanpa trafilatura
 KNOWN_PLATFORMS = {"dealls", "glints", "kalibrr", "jobstreet"}
+PLAYWRIGHT_PLATFORMS = {"glints", "jobstreet"}
 
 HEADERS = {
     "User-Agent": (
@@ -76,6 +79,54 @@ def extract_text_bs4(html: str) -> Optional[str]:
         return None
 
 
+def _collect_json_strings(value, output: list[str]) -> None:
+    """Collect readable text from embedded structured job data."""
+    if isinstance(value, dict):
+        for child in value.values():
+            _collect_json_strings(child, output)
+    elif isinstance(value, list):
+        for item in value:
+            _collect_json_strings(item, output)
+    elif isinstance(value, str):
+        text = re.sub(r"<[^>]+>", " ", value)
+        text = re.sub(r"\s+", " ", text).strip()
+        if 3 <= len(text) <= 2000:
+            output.append(text)
+
+
+def extract_structured_text(html: str) -> str:
+    """Extract useful strings from JSON-LD and Next.js app state scripts."""
+    try:
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(html, "html.parser")
+        chunks: list[str] = []
+
+        for script in soup.find_all("script"):
+            script_id = script.get("id", "")
+            script_type = script.get("type", "")
+            raw = (script.string or script.get_text() or "").strip()
+            if not raw:
+                continue
+            if script_type != "application/ld+json" and script_id != "__NEXT_DATA__":
+                continue
+            try:
+                data = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            _collect_json_strings(data, chunks)
+
+        seen = set()
+        unique = []
+        for chunk in chunks:
+            key = chunk.lower()
+            if key not in seen:
+                seen.add(key)
+                unique.append(chunk)
+        return "\n".join(unique)
+    except Exception:
+        return ""
+
+
 def extract_text_trafilatura(html: str, url: str) -> Optional[str]:
     """Ekstrak teks bersih — hanya untuk generic/unknown platforms."""
     try:
@@ -100,6 +151,25 @@ def extract_title_bs4(html: str) -> Optional[str]:
         return None
 
 
+def fetch_rendered_html(url: str, wait_ms: int = 3000) -> Optional[str]:
+    """Render a JS-heavy page with Playwright and return final HTML."""
+    try:
+        from playwright.sync_api import sync_playwright
+
+        console.print(f"  [magenta][PW][/magenta] Rendering detail: {url}")
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page(user_agent=HEADERS["User-Agent"])
+            page.goto(url, wait_until="networkidle", timeout=30000)
+            page.wait_for_timeout(wait_ms)
+            html = page.content()
+            browser.close()
+            return html
+    except Exception as e:
+        console.print(f"  [red][PW ERR][/red] Detail render failed for {url}: {e}")
+        return None
+
+
 def fetch_page(url: str, timeout: int = DEFAULT_TIMEOUT) -> Optional[RawPage]:
     """
     Fetch satu halaman web.
@@ -120,6 +190,14 @@ def fetch_page(url: str, timeout: int = DEFAULT_TIMEOUT) -> Optional[RawPage]:
         status_code = response.status_code
         title = extract_title_bs4(html)
         platform = detect_platform(url)
+        page_type = classify_page(url, title or "")
+
+        if platform in PLAYWRIGHT_PLATFORMS and page_type == "detail":
+            rendered_html = fetch_rendered_html(url)
+            if rendered_html:
+                html = rendered_html
+                status_code = 200
+                title = extract_title_bs4(html) or title
 
         # Known platforms: BS4 saja (cepat, 3-5x lebih cepat dari trafilatura)
         if platform in KNOWN_PLATFORMS:
@@ -130,6 +208,9 @@ def fetch_page(url: str, timeout: int = DEFAULT_TIMEOUT) -> Optional[RawPage]:
             if not text:
                 text = extract_text_bs4(html)
 
+        structured_text = extract_structured_text(html)
+        if structured_text:
+            text = f"{text or ''}\n{structured_text}".strip()
         if not text:
             text = ""
 

@@ -437,6 +437,13 @@ def extract_detail_links_from_listing(url: str, html: str = "") -> list[DetailLi
 
     links = adapter.extract_detail_links(url, html)
 
+    # SPA HTML dari requests sering "ada" tapi belum berisi job cards.
+    # Jika parse pertama kosong, render Playwright sebagai fallback.
+    if adapter.needs_playwright() and not links:
+        rendered = fetch_with_playwright(url) or ""
+        if rendered and rendered != html:
+            links = adapter.extract_detail_links(url, rendered)
+
     if links:
         console.print(f"  [green][OK][/green] Found {len(links)} detail links from {platform}")
     else:
