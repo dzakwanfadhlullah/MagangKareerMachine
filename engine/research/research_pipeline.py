@@ -21,9 +21,9 @@ from engine.extractor import (
     extract_all_with_rejections,
     normalize_target_category,
 )
-from engine.fetcher import fetch_all
-from engine.listing_parser import classify_page, detect_platform
-from engine.models import DetailLink, RawPage
+from engine.fetcher import fetch_all, fetch_detail_urls
+from engine.listing_parser import classify_page, detect_platform, extract_detail_links_from_listing
+from engine.models import DetailLink, RawPage, RawSearchResult
 from engine.research.page_verifier import verify_research_page
 from engine.research.profiles import get_research_profile
 from engine.research.query_planner import plan_research_queries
@@ -83,6 +83,36 @@ def _save_research_candidates(results, target_category: Optional[str]) -> None:
         row["status"] = "discovered"
         candidates.append(row)
     save_discovery_candidates(candidates)
+
+
+def _save_detail_link_candidates(links: list[DetailLink], target_category: Optional[str]) -> None:
+    target = normalize_target_category(target_category)
+    candidates = []
+    for link in links:
+        row = link.model_dump()
+        row["target_category"] = target
+        row["status"] = "discovered"
+        candidates.append(row)
+    save_discovery_candidates(candidates)
+
+
+def _detail_links_to_search_results(links: list[DetailLink]) -> list[RawSearchResult]:
+    results = []
+    seen = set()
+    for link in links:
+        if link.url in seen:
+            continue
+        seen.add(link.url)
+        results.append(RawSearchResult(
+            query=f"listing-followup:{link.listing_url}",
+            title=link.title or "",
+            snippet="detail link discovered from research listing",
+            url=link.url,
+            source=link.discovery_method,
+            page_type="detail",
+            source_platform=link.source_platform or detect_platform(link.url),
+        ))
+    return results
 
 
 def run_research_pipeline(
@@ -171,16 +201,55 @@ def run_research_pipeline(
 
     console.print("\n[bold]Step 5:[/bold] Verifying pages...")
     verified_pages = []
+    listing_detail_links: list[DetailLink] = []
     rejected_count = 0
     for page in pages:
         rejection = verify_research_page(page)
         if rejection:
+            if rejection.rejection_reason == "listing_or_category_url" and page.html_content:
+                listing_detail_links.extend(extract_detail_links_from_listing(page.url, page.html_content))
             if save_rejected_candidate(rejection.model_dump()):
                 rejected_count += 1
             continue
         page.page_type = "detail"
         verified_pages.append(page)
     console.print(f"[green][OK][/green] Verified {len(verified_pages)} detail pages; rejected {rejected_count}")
+
+    if listing_detail_links:
+        console.print(
+            f"  [cyan][INFO][/cyan] Found {len(listing_detail_links)} follow-up detail links "
+            "inside rejected listing pages"
+        )
+        _save_detail_link_candidates(listing_detail_links, target_category)
+        followup_results = rank_research_results(
+            _detail_links_to_search_results(listing_detail_links),
+            target_category=target_category,
+            max_urls=max(0, max_fetch - len(pages)),
+        )
+        if followup_results:
+            followup_urls = [result.url for result in followup_results]
+            followup_pages = fetch_detail_urls(
+                followup_urls,
+                existing_urls=get_existing_urls(),
+                workers=workers,
+                timeout=timeout,
+            )
+            for page in followup_pages:
+                save_raw_page(page.model_dump())
+                if page.api_responses:
+                    save_raw_api_responses([item.model_dump() for item in page.api_responses])
+
+            followup_verified = 0
+            for page in followup_pages:
+                rejection = verify_research_page(page)
+                if rejection:
+                    if save_rejected_candidate(rejection.model_dump()):
+                        rejected_count += 1
+                    continue
+                page.page_type = "detail"
+                verified_pages.append(page)
+                followup_verified += 1
+            console.print(f"  [green][OK][/green] Verified {followup_verified} follow-up detail pages")
 
     console.print("\n[bold]Step 6:[/bold] Extracting and filtering...")
     opportunities, rejections = extract_all_with_rejections(
