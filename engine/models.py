@@ -80,9 +80,11 @@ class Opportunity(BaseModel):
     work_mode: Optional[str] = None  # remote | hybrid | onsite
     duration: Optional[str] = None
     salary: Optional[str] = None
+    salary_confidence: int = 0
     deadline: Optional[str] = None
     source_url: str  # Direct detail URL, bukan listing
     detail_url: Optional[str] = None
+    original_url: Optional[str] = None
     source_name: Optional[str] = None
     source_platform: Optional[str] = None
     raw_text: Optional[str] = None

@@ -17,6 +17,7 @@ import yaml
 from rich.console import Console
 
 from engine.models import RawPage, Opportunity, RejectedCandidate
+from engine.url_utils import canonicalize_url
 
 console = Console()
 
@@ -404,7 +405,26 @@ def detect_work_mode(text: str, config: dict) -> Optional[str]:
     text_lower = text[:3000].lower()
     work_modes = config.get("work_modes", {})
 
-    # Check hybrid first (contains terms from both remote and onsite)
+    # Explicit remote/onsite signals should beat broad hybrid text.
+    explicit_remote = [
+        r"\bwfh\b",
+        r"\bwork\s+from\s+home\b",
+        r"\bfull\s+remote\b",
+        r"\bfully\s+remote\b",
+    ]
+    explicit_onsite = [
+        r"\bwfo\b",
+        r"\bwork\s+from\s+office\b",
+        r"\bonsite\b",
+        r"\bon-site\b",
+    ]
+    if any(re.search(pattern, text_lower) for pattern in explicit_onsite):
+        return "onsite"
+    if any(re.search(pattern, text_lower) for pattern in explicit_remote):
+        return "remote"
+    if "hybrid" in text_lower:
+        return "hybrid"
+
     for mode in ["hybrid", "remote", "onsite"]:
         signals = work_modes.get(mode, [])
         for signal in signals:
@@ -445,6 +465,8 @@ def detect_deadline(text: str) -> Optional[str]:
 
 
 def detect_salary(text: str) -> Optional[str]:
+    if salary_hidden(text):
+        return None
     for pattern in STRICT_SALARY_PATTERNS:
         match = re.search(pattern, text[:5000], re.IGNORECASE)
         if match:
@@ -455,6 +477,33 @@ def detect_salary(text: str) -> Optional[str]:
                 continue
             return result
     return None
+
+
+def salary_hidden(text: str) -> bool:
+    """Detect explicit platform text saying salary is not displayed."""
+    lowered = text[:3000].lower()
+    hidden_signals = [
+        "perusahaan tidak menampilkan gaji",
+        "gaji tidak ditampilkan",
+        "salary not displayed",
+        "salary undisclosed",
+        "undisclosed salary",
+    ]
+    return any(signal in lowered for signal in hidden_signals)
+
+
+def salary_confidence(text: str, salary: Optional[str]) -> int:
+    """Coarse confidence for salary extraction."""
+    if not salary:
+        return 0
+    lowered = text[:5000].lower()
+    if salary_hidden(text):
+        return 0
+    if any(signal in lowered for signal in ["uang saku", "allowance", "stipend", "salary", "gaji"]):
+        return 80
+    if re.search(r"\b(?:paid internship|unpaid internship|unpaid)\b", salary, re.IGNORECASE):
+        return 70
+    return 50
 
 
 def detect_duration(text: str) -> Optional[str]:
@@ -548,6 +597,7 @@ def extract_opportunity_with_rejection(
         return None, build_rejected_candidate(page, "listing_title", title=title)
 
     text = page.text_content
+    field_text = f"{title}\n{text}"
 
     # Gate 2: Internship detection
     is_intern, intern_conf, intern_src = detect_internship(text, title, config)
@@ -584,16 +634,18 @@ def extract_opportunity_with_rejection(
     category = detect_category(role) if role and role_conf >= 60 else None
 
     # Location (grouped)
-    location, location_area = detect_location(text, config)
-    work_mode = detect_work_mode(text, config)
+    location, location_area = detect_location(field_text, config)
+    work_mode = detect_work_mode(field_text, config)
 
     # Strict fields
-    deadline = detect_deadline(text)
-    salary = detect_salary(text)
-    duration = detect_duration(text)
+    deadline = detect_deadline(field_text)
+    salary = detect_salary(field_text)
+    sal_conf = salary_confidence(field_text, salary)
+    duration = detect_duration(field_text)
     company = detect_company(text, title)
     summary = generate_summary(text)
-    source_name = get_source_name(page.url)
+    canonical_url = canonicalize_url(page.url)
+    source_name = get_source_name(canonical_url)
     platform = page.source_platform or detect_platform(page.url)
 
     opp_title = (title if title else "Untitled")[:200]
@@ -613,9 +665,11 @@ def extract_opportunity_with_rejection(
         work_mode=work_mode,
         duration=duration,
         salary=salary,
+        salary_confidence=sal_conf,
         deadline=deadline,
-        source_url=page.url,
-        detail_url=page.url,
+        source_url=canonical_url,
+        detail_url=canonical_url,
+        original_url=page.url if page.url != canonical_url else None,
         source_name=source_name,
         source_platform=platform,
         raw_text=text[:5000],

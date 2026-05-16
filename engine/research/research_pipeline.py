@@ -63,7 +63,10 @@ def _fetch_or_load_research_results(results, workers: int, timeout: int) -> list
 
     by_url = {page.url: page for page in cached_pages}
     by_url.update({page.url: page for page in fetched_pages})
-    return [by_url[url] for url in urls if url in by_url]
+    ordered = [by_url[url] for url in urls if url in by_url]
+    requested = {page.url for page in ordered}
+    ordered.extend(page for page in fetched_pages if page.url not in requested)
+    return ordered
 
 
 def _save_research_candidates(results, target_category: Optional[str]) -> None:

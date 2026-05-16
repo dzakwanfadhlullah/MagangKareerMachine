@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 from rich.console import Console
 
 from engine.models import Opportunity
+from engine.url_utils import canonicalize_url
 
 console = Console()
 
@@ -97,6 +98,19 @@ def dedupe_opportunities(opportunities: list[Opportunity]) -> list[Opportunity]:
     """
     if not opportunities:
         return []
+
+    url_map: dict[str, Opportunity] = {}
+    no_url: list[Opportunity] = []
+    for opp in opportunities:
+        if opp.source_url:
+            opp.source_url = canonicalize_url(opp.source_url)
+            if opp.detail_url:
+                opp.detail_url = canonicalize_url(opp.detail_url)
+            if opp.source_url not in url_map or opp.score > url_map[opp.source_url].score:
+                url_map[opp.source_url] = opp
+        else:
+            no_url.append(opp)
+    opportunities = list(url_map.values()) + no_url
 
     # Step 1: Assign canonical keys
     for opp in opportunities:

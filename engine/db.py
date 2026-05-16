@@ -128,9 +128,11 @@ def init_db(db_path: Optional[str] = None) -> None:
             work_mode TEXT,
             duration TEXT,
             salary TEXT,
+            salary_confidence INTEGER DEFAULT 0,
             deadline TEXT,
             source_url TEXT,
             detail_url TEXT,
+            original_url TEXT,
             source_name TEXT,
             source_platform TEXT,
             raw_text TEXT,
@@ -184,6 +186,8 @@ def init_db(db_path: Optional[str] = None) -> None:
 
     _ensure_column(cursor, "crawl_queue", "discovery_method", "TEXT DEFAULT 'dom'")
     _ensure_column(cursor, "crawl_queue", "target_score", "INTEGER DEFAULT 0")
+    _ensure_column(cursor, "opportunities", "salary_confidence", "INTEGER DEFAULT 0")
+    _ensure_column(cursor, "opportunities", "original_url", "TEXT")
 
     conn.commit()
     conn.close()
@@ -399,11 +403,11 @@ def save_opportunity(opp: dict, db_path: Optional[str] = None) -> bool:
             conn.execute(
                 """INSERT INTO opportunities
                 (canonical_key, title, company, role, category, location, location_area, work_mode,
-                 duration, salary, deadline, source_url, detail_url, source_name,
+                 duration, salary, salary_confidence, deadline, source_url, detail_url, original_url, source_name,
                  source_platform, raw_text, summary, score, confidence,
                  is_internship, internship_confidence, role_confidence,
                  page_type, extraction_status, rejection_reason)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     opp["canonical_key"],
                     opp["title"],
@@ -415,9 +419,11 @@ def save_opportunity(opp: dict, db_path: Optional[str] = None) -> bool:
                     opp.get("work_mode"),
                     opp.get("duration"),
                     opp.get("salary"),
+                    opp.get("salary_confidence", 0),
                     opp.get("deadline"),
                     opp["source_url"],
                     opp.get("detail_url"),
+                    opp.get("original_url"),
                     opp.get("source_name"),
                     opp.get("source_platform"),
                     opp.get("raw_text"),

@@ -181,3 +181,50 @@ def test_research_pipeline_follows_listing_detail_links(monkeypatch, tmp_path):
     opportunities = get_all_opportunities(db_path)
     assert opportunities[0]["source_url"] == "https://glints.com/id/opportunities/jobs/frontend-developer-intern/abc"
     assert get_rejected_candidates(db_path=db_path)[0]["rejection_reason"] == "listing_or_category_url"
+
+
+def test_research_pipeline_saves_canonical_url_and_original_url(monkeypatch, tmp_path):
+    db_path = str(tmp_path / "research_url.db")
+    export_dir = tmp_path / "exports"
+    monkeypatch.setenv("DB_PATH", db_path)
+    monkeypatch.setenv("EXPORT_DIR", str(export_dir))
+    monkeypatch.setattr("engine.exporter.EXPORT_DIR", str(export_dir))
+    monkeypatch.setattr("engine.research.research_pipeline.export_all.__globals__['EXPORT_DIR']", str(export_dir), raising=False)
+
+    raw_url = (
+        "https://glints.com/id/opportunities/jobs/frontend-developer-intern/abc"
+        "?utm_referrer=explore&traceInfo=123"
+    )
+
+    def fake_fetch_all(results, existing_urls=None, workers=1, timeout=10):
+        return [
+            RawPage(
+                url=raw_url,
+                title="Frontend Developer Intern",
+                text_content="Frontend Developer Intern. Internship React role. Program magang mahasiswa. Jakarta.",
+                status_code=200,
+                page_type="detail",
+                source_platform="glints",
+                fetch_method="test",
+            )
+        ]
+
+    monkeypatch.setattr("engine.research.research_pipeline.fetch_all", fake_fetch_all)
+
+    saved = run_research_pipeline(
+        query="frontend developer intern",
+        location="Indonesia",
+        target_category="frontend",
+        profile="fast",
+        query_count=1,
+        max_fetch=1,
+        workers=1,
+        timeout=1,
+        provider=StaticProvider(),
+    )
+
+    assert saved == 1
+    opportunity = get_all_opportunities(db_path)[0]
+    assert opportunity["source_url"] == "https://glints.com/id/opportunities/jobs/frontend-developer-intern/abc"
+    assert opportunity["detail_url"] == "https://glints.com/id/opportunities/jobs/frontend-developer-intern/abc"
+    assert opportunity["original_url"] == raw_url

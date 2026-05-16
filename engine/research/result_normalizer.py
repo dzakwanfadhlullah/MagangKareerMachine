@@ -1,35 +1,8 @@
 """Normalize search-index results into RawSearchResult rows."""
 
-from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
-
 from engine.listing_parser import classify_page, detect_platform
 from engine.models import RawSearchResult
-
-TRACKING_PARAMS = {
-    "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
-    "utm_referrer", "traceinfo", "traceInfo", "fbclid", "gclid", "msclkid",
-}
-
-
-def canonicalize_url(url: str) -> str:
-    """Remove fragments and common tracking params while preserving useful query."""
-    parsed = urlparse((url or "").strip())
-    if not parsed.scheme or not parsed.netloc:
-        return url.strip()
-
-    kept_query = [
-        (key, value)
-        for key, value in parse_qsl(parsed.query, keep_blank_values=True)
-        if key not in TRACKING_PARAMS
-    ]
-    return urlunparse((
-        parsed.scheme.lower(),
-        parsed.netloc.lower(),
-        parsed.path.rstrip("/") or parsed.path,
-        "",
-        urlencode(kept_query),
-        "",
-    ))
+from engine.url_utils import canonicalize_url
 
 
 def normalize_search_hit(hit: dict, query: str, source: str = "ddgs") -> RawSearchResult | None:

@@ -292,6 +292,7 @@ def test_work_mode():
     assert detect_work_mode("Full remote position", config) == "remote"
     assert detect_work_mode("Work from office daily", config) == "onsite"
     assert detect_work_mode("Hybrid partly remote", config) == "hybrid"
+    assert detect_work_mode("Magang Web Developer (WFH) hybrid discussion", config) == "remote"
     assert detect_work_mode("No info about mode", config) is None
     print("[PASS] work mode detection")
 
@@ -309,6 +310,7 @@ def test_strict_salary():
     assert detect_salary("Uang saku Rp3.000.000/bulan") is not None
     assert detect_salary("IDR 5,000,000") is not None
     assert detect_salary("3-5 juta per bulan") is not None
+    assert detect_salary("Perusahaan tidak menampilkan gaji. 5 juta applicants viewed this job") is None
     assert detect_salary("RP,") is None
     assert detect_salary("No salary info") is None
     print("[PASS] strict salary")
