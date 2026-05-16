@@ -297,7 +297,7 @@ def run_crawl_sources(
 
     # --- Step 1: Load sources ---
     console.print("\n[bold]Step 1:[/bold] Loading sources...")
-    raw_results = search_manual_sources()
+    raw_results = search_manual_sources(target_category=target_category)
     if not raw_results:
         console.print("[yellow][WARN][/yellow] No sources")
         return 0
@@ -419,7 +419,7 @@ def run_search_pipeline(
 
     # Step 2: Search
     console.print("\n[bold]Step 2:[/bold] Searching...")
-    raw_results = search_all(queries, limit)
+    raw_results = search_all(queries, limit, target_category=target_category)
     if not raw_results:
         console.print("[yellow][WARN][/yellow] No results")
         return 0

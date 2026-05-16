@@ -22,6 +22,33 @@ crawl_profiles:
     workers: 8
     timeout: 12
 
+role_sources:
+  actuarial:
+    - name: glints_actuarial_internship
+      platform: glints
+      type: listing
+      url: https://glints.com/id/en/find-jobs/loker-actuarial-internship
+
+    - name: glints_actuary_internship
+      platform: glints
+      type: listing
+      url: https://glints.com/id/en/find-jobs/loker-actuary-internship
+
+    - name: jobstreet_actuarial_internship
+      platform: jobstreet
+      type: listing
+      url: https://www.jobstreet.co.id/id/actuarial-internship-jobs
+
+    - name: jobstreet_actuary_internship
+      platform: jobstreet
+      type: listing
+      url: https://www.jobstreet.co.id/id/actuary-internship-jobs
+
+    - name: dealls_actuarial_internship
+      platform: dealls
+      type: listing
+      url: https://dealls.com/loker/actuarial-internship
+
 sources:
   tier_1:
     - name: dealls_magang

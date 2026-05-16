@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 import yaml
 from rich.console import Console
 
+from engine.extractor import normalize_target_category
 from engine.models import RawSearchResult
 
 console = Console()
@@ -37,35 +38,50 @@ def get_crawl_profile(profile: str, config_path: Optional[Path] = None) -> dict:
     return profiles[profile]
 
 
-def iter_manual_source_entries(config: dict) -> list[dict]:
+def iter_manual_source_entries(config: dict, target_category: Optional[str] = None) -> list[dict]:
     """
     Flatten manual source config.
 
-    Supports the legacy manual_sources list and the new tiered sources format.
+    Supports role-specific sources, the legacy manual_sources list, and the
+    tiered sources format. Role-specific entries are prepended for targeted
+    crawls/searches.
     """
     entries: list[dict] = []
+    seen_urls: set[str] = set()
+
+    def add_entry(item: dict, tier: str) -> None:
+        if not isinstance(item, dict) or not item.get("url"):
+            return
+        url = item["url"]
+        if url in seen_urls:
+            return
+        seen_urls.add(url)
+        copied = dict(item)
+        copied["tier"] = tier
+        entries.append(copied)
+
+    target = normalize_target_category(target_category)
+    role_sources = config.get("role_sources", {})
+    if target and isinstance(role_sources, dict):
+        for item in role_sources.get(target, []) or []:
+            add_entry(item, f"role:{target}")
 
     legacy_urls = config.get("manual_sources", [])
     for url in legacy_urls:
         domain = urlparse(url).netloc
-        entries.append({
+        add_entry({
             "name": f"manual_{domain}",
             "platform": None,
             "type": "listing",
             "url": url,
-            "tier": "legacy",
-        })
+        }, "legacy")
 
     tiered = config.get("sources", {})
     if isinstance(tiered, dict):
         for tier_name in sorted(tiered):
             tier_entries = tiered.get(tier_name) or []
             for item in tier_entries:
-                if not isinstance(item, dict) or not item.get("url"):
-                    continue
-                item = dict(item)
-                item["tier"] = tier_name
-                entries.append(item)
+                add_entry(item, tier_name)
 
     return entries
 
@@ -120,12 +136,15 @@ def search_web(queries: list[str], max_results: int = 20) -> list[RawSearchResul
     return unique
 
 
-def search_manual_sources(config_path: Optional[Path] = None) -> list[RawSearchResult]:
+def search_manual_sources(
+    config_path: Optional[Path] = None,
+    target_category: Optional[str] = None,
+) -> list[RawSearchResult]:
     """
     Generate RawSearchResult dari manual seed URLs di sources.yml.
     """
     config = load_sources(config_path)
-    manual_sources = iter_manual_source_entries(config)
+    manual_sources = iter_manual_source_entries(config, target_category=target_category)
     results = []
 
     for item in manual_sources:
@@ -151,6 +170,7 @@ def search_all(
     queries: list[str],
     max_results: int = 20,
     config_path: Optional[Path] = None,
+    target_category: Optional[str] = None,
 ) -> list[RawSearchResult]:
     """
     Jalankan semua strategi pencarian:
@@ -170,7 +190,7 @@ def search_all(
         console.print(f"[green][OK][/green] Found {len(web_results)} results from web search")
 
     # Manual sources
-    manual_results = search_manual_sources(config_path)
+    manual_results = search_manual_sources(config_path, target_category=target_category)
     all_results.extend(manual_results)
     console.print(f"[green][OK][/green] Found {len(manual_results)} manual sources")
 
