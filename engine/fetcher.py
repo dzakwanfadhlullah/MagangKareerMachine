@@ -191,6 +191,7 @@ def fetch_page(url: str, timeout: int = DEFAULT_TIMEOUT) -> Optional[RawPage]:
         title = extract_title_bs4(html)
         platform = detect_platform(url)
         page_type = classify_page(url, title or "")
+        fetch_method = "requests"
 
         if platform in PLAYWRIGHT_PLATFORMS and page_type in {"listing", "detail"}:
             rendered_html = fetch_rendered_html(url)
@@ -198,6 +199,7 @@ def fetch_page(url: str, timeout: int = DEFAULT_TIMEOUT) -> Optional[RawPage]:
                 html = rendered_html
                 status_code = 200
                 title = extract_title_bs4(html) or title
+                fetch_method = "playwright"
 
         # Known platforms: BS4 saja (cepat, 3-5x lebih cepat dari trafilatura)
         if platform in KNOWN_PLATFORMS:
@@ -228,6 +230,7 @@ def fetch_page(url: str, timeout: int = DEFAULT_TIMEOUT) -> Optional[RawPage]:
             status_code=status_code,
             page_type=page_type,
             source_platform=platform,
+            fetch_method=fetch_method,
         )
 
     except requests.Timeout:

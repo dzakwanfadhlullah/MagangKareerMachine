@@ -26,6 +26,7 @@ class RawPage(BaseModel):
     status_code: int
     page_type: str = "unknown"  # listing | detail | unknown
     source_platform: Optional[str] = None
+    fetch_method: Optional[str] = None  # requests | playwright | cached
 
 
 class DetailLink(BaseModel):
