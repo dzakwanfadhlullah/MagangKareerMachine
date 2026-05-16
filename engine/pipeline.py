@@ -22,7 +22,16 @@ from engine.listing_parser import (
     classify_page,
     detect_platform,
 )
-from engine.extractor import extract_all_with_rejections, build_rejected_candidate, TITLE_INTERNSHIP_SIGNALS
+from engine.extractor import (
+    TOP_LEVEL_CATEGORIES,
+    ROLE_CATEGORY,
+    ROLE_DISPLAY,
+    TITLE_INTERNSHIP_SIGNALS,
+    build_rejected_candidate,
+    extract_all_with_rejections,
+    load_keywords,
+    normalize_target_category,
+)
 from engine.scorer import score_all
 from engine.deduper import dedupe_opportunities
 from engine.db import (
@@ -180,6 +189,62 @@ def _early_filter_links(links: list[dict]) -> list[dict]:
         console.print(f"  [dim]Early filter: skipped {skipped} senior/management links[/dim]")
 
     return filtered
+
+
+def _target_link_score(link: dict, target_category: Optional[str], config: Optional[dict] = None) -> int:
+    """Score listing-card links for target-aware fetch priority before caps."""
+    target = normalize_target_category(target_category)
+    if not target:
+        return 0
+
+    config = config or load_keywords()
+    text = f"{link.get('title') or ''} {link.get('url') or ''}".lower()
+    if not text.strip():
+        return 0
+
+    role_keywords = config.get("role_keywords", {})
+    candidate_role_keys: list[str] = []
+    if target in TOP_LEVEL_CATEGORIES:
+        for role_key, display in ROLE_DISPLAY.items():
+            if ROLE_CATEGORY.get(display) == target:
+                candidate_role_keys.append(role_key)
+    else:
+        candidate_role_keys.append(target)
+
+    score = 0
+    for role_key in candidate_role_keys:
+        role_cfg = role_keywords.get(role_key, {})
+        if not isinstance(role_cfg, dict):
+            continue
+        for strong in role_cfg.get("strong_titles", []):
+            strong_text = str(strong).lower()
+            if strong_text and strong_text in text:
+                score += 100
+        for supporting in role_cfg.get("supporting_skills", []):
+            supporting_text = str(supporting).lower()
+            if supporting_text and supporting_text in text:
+                score += 15
+
+    if target in text:
+        score += 25
+    return score
+
+
+def _prioritize_target_links(links: list[dict], target_category: Optional[str]) -> list[dict]:
+    """Move likely target-relevant links before caps without dropping others."""
+    if not target_category or not links:
+        return links
+
+    config = load_keywords()
+    indexed = [
+        (_target_link_score(link, target_category, config), index, link)
+        for index, link in enumerate(links)
+    ]
+    indexed.sort(key=lambda item: (-item[0], item[1]))
+    top_matches = sum(1 for score, _, _ in indexed if score > 0)
+    if top_matches:
+        console.print(f"  [dim]Target priority: moved {top_matches} likely {normalize_target_category(target_category)} links up[/dim]")
+    return [link for _, _, link in indexed]
 
 
 def _cap_links_per_source(links: list[dict], max_per_source: int) -> list[dict]:
@@ -344,6 +409,9 @@ def run_crawl_sources(
             all_links.append(link_data)
 
     if all_links:
+        # Prioritize target-relevant cards before per-source and total caps.
+        all_links = _prioritize_target_links(all_links, target_category)
+
         # Cap per source
         all_links = _cap_links_per_source(all_links, max_per_source)
 
@@ -450,6 +518,7 @@ def run_search_pipeline(
             all_links.extend(link.model_dump() for link in links)
 
         if all_links:
+            all_links = _prioritize_target_links(all_links, target_category)
             all_links = _cap_links_per_source(all_links, max_per_source)
             all_links = _early_filter_links(all_links)
             if len(all_links) > max_total_detail:

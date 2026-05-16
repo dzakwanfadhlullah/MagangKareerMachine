@@ -24,6 +24,16 @@ crawl_profiles:
 
 role_sources:
   actuarial:
+    - name: glints_magang_targeted_scan
+      platform: glints
+      type: listing
+      url: https://glints.com/id/en/find-jobs/loker-magang-internship
+
+    - name: dealls_magang_targeted_scan
+      platform: dealls
+      type: listing
+      url: https://dealls.com/loker/tipe/loker-magang
+
     - name: glints_actuarial_internship
       platform: glints
       type: listing

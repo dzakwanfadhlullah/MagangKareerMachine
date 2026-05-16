@@ -40,7 +40,7 @@ def test_targeted_sources_are_prepended():
     results = search_manual_sources(target_category="actuarial")
 
     assert entries[0]["tier"] == "role:actuarial"
-    assert entries[0]["name"] == "glints_actuarial_internship"
+    assert entries[0]["name"] == "glints_magang_targeted_scan"
     assert results[0].query == "manual_source:role:actuarial"
     assert results[0].source_platform == "glints"
     assert any(r.query == "manual_source:tier_1" for r in results)
