@@ -29,6 +29,14 @@ def ensure_export_dir() -> None:
     Path(EXPORT_DIR).mkdir(parents=True, exist_ok=True)
 
 
+def _clean_opportunities(opportunities: list[dict]) -> list[dict]:
+    """Keep only stable export columns."""
+    return [
+        {col: opp.get(col) for col in EXPORT_COLUMNS if col in opp}
+        for opp in opportunities
+    ]
+
+
 def export_csv(db_path: Optional[str] = None, output_path: Optional[str] = None) -> str:
     """
     Ekspor semua opportunities ke CSV.
@@ -38,19 +46,17 @@ def export_csv(db_path: Optional[str] = None, output_path: Optional[str] = None)
     path = output_path or os.path.join(EXPORT_DIR, "results.csv")
 
     opportunities = get_all_opportunities(db_path)
-
-    if not opportunities:
-        console.print("[yellow][WARN][/yellow] No opportunities to export")
-        return path
-
-    df = pd.DataFrame(opportunities)
+    df = pd.DataFrame(_clean_opportunities(opportunities), columns=EXPORT_COLUMNS)
 
     # Pilih kolom yang ada saja
     available_cols = [col for col in EXPORT_COLUMNS if col in df.columns]
     df = df[available_cols]
 
     df.to_csv(path, index=False, encoding="utf-8-sig")
-    console.print(f"[green][OK][/green] Exported {len(df)} opportunities to {path}")
+    if opportunities:
+        console.print(f"[green][OK][/green] Exported {len(df)} opportunities to {path}")
+    else:
+        console.print(f"[yellow][WARN][/yellow] Exported empty results to {path}")
     return path
 
 
@@ -63,21 +69,15 @@ def export_json(db_path: Optional[str] = None, output_path: Optional[str] = None
     path = output_path or os.path.join(EXPORT_DIR, "results.json")
 
     opportunities = get_all_opportunities(db_path)
-
-    if not opportunities:
-        console.print("[yellow][WARN][/yellow] No opportunities to export")
-        return path
-
-    # Pilih kolom yang relevan
-    cleaned = []
-    for opp in opportunities:
-        item = {col: opp.get(col) for col in EXPORT_COLUMNS if col in opp}
-        cleaned.append(item)
+    cleaned = _clean_opportunities(opportunities)
 
     with open(path, "w", encoding="utf-8") as f:
         json.dump(cleaned, f, ensure_ascii=False, indent=2, default=str)
 
-    console.print(f"[green][OK][/green] Exported {len(cleaned)} opportunities to {path}")
+    if cleaned:
+        console.print(f"[green][OK][/green] Exported {len(cleaned)} opportunities to {path}")
+    else:
+        console.print(f"[yellow][WARN][/yellow] Exported empty results to {path}")
     return path
 
 
