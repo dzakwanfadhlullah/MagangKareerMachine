@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 from typing import Optional
+from datetime import datetime, timezone
 
 import pandas as pd
 from rich.console import Console
@@ -81,8 +82,34 @@ def export_json(db_path: Optional[str] = None, output_path: Optional[str] = None
     return path
 
 
-def export_all(db_path: Optional[str] = None) -> tuple[str, str]:
+def export_metadata(
+    db_path: Optional[str] = None,
+    output_path: Optional[str] = None,
+    metadata: Optional[dict] = None,
+) -> str:
+    """Write run metadata next to exports so stale artifacts are obvious."""
+    ensure_export_dir()
+    path = output_path or os.path.join(EXPORT_DIR, "run_metadata.json")
+    opportunities = get_all_opportunities(db_path)
+    payload = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "db_path": db_path or os.getenv("DB_PATH") or "data/magangkareer.db",
+        "export_dir": EXPORT_DIR,
+        "result_count": len(opportunities),
+    }
+    if metadata:
+        payload.update(metadata)
+
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2, default=str)
+
+    console.print(f"[green][OK][/green] Exported run metadata to {path}")
+    return path
+
+
+def export_all(db_path: Optional[str] = None, metadata: Optional[dict] = None) -> tuple[str, str]:
     """Ekspor ke CSV dan JSON sekaligus."""
     csv_path = export_csv(db_path)
     json_path = export_json(db_path)
+    export_metadata(db_path, metadata=metadata)
     return csv_path, json_path

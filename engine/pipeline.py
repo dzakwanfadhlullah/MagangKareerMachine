@@ -457,7 +457,16 @@ def run_crawl_sources(
     _print_source_diagnostics(diagnostics)
 
     console.print("\n[bold]Exporting...[/bold]")
-    export_all()
+    export_all(metadata={
+        "command": "crawl-sources",
+        "target_category": target_category,
+        "min_score": min_score,
+        "max_sources": max_sources,
+        "max_per_source": max_per_source,
+        "max_total_detail": max_total_detail,
+        "workers": workers,
+        "timeout": timeout,
+    })
 
     console.rule("[bold green]Done[/bold green]")
     console.print(f"\n Saved: {saved} opportunities")
@@ -541,7 +550,18 @@ def run_search_pipeline(
     saved = _stage2_process(detail_pages, min_score, target_category=target_category)
 
     console.print("\n[bold]Exporting...[/bold]")
-    export_all()
+    export_all(metadata={
+        "command": "search",
+        "query": query,
+        "location": location,
+        "target_category": target_category,
+        "min_score": min_score,
+        "max_per_source": max_per_source,
+        "max_total_detail": max_total_detail,
+        "workers": workers,
+        "timeout": timeout,
+        "query_limit": query_limit,
+    })
 
     console.rule("[bold green]Done[/bold green]")
     console.print(f"\n Saved: {saved} opportunities")

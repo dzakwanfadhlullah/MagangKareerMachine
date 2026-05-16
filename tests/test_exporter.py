@@ -9,7 +9,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from engine.db import init_db
-from engine.exporter import EXPORT_COLUMNS, export_csv, export_json
+from engine.exporter import EXPORT_COLUMNS, export_all, export_csv, export_json
 
 
 def test_empty_export_overwrites_stale_files(tmp_path):
@@ -29,3 +29,18 @@ def test_empty_export_overwrites_stale_files(tmp_path):
         rows = list(csv.reader(f))
 
     assert rows == [EXPORT_COLUMNS]
+
+
+def test_export_all_writes_run_metadata(tmp_path, monkeypatch):
+    db_path = str(tmp_path / "empty.db")
+    export_dir = tmp_path / "exports"
+    monkeypatch.setattr("engine.exporter.EXPORT_DIR", str(export_dir))
+
+    init_db(db_path)
+    export_all(db_path=db_path, metadata={"command": "crawl-sources", "target_category": "actuarial"})
+
+    metadata = json.loads((export_dir / "run_metadata.json").read_text(encoding="utf-8"))
+    assert metadata["db_path"] == db_path
+    assert metadata["result_count"] == 0
+    assert metadata["command"] == "crawl-sources"
+    assert metadata["target_category"] == "actuarial"
