@@ -26,7 +26,9 @@ DEFAULT_WORKERS = int(os.getenv("FETCH_WORKERS", "5"))
 
 # Platform yang HTML-nya bisa langsung di-parse BS4 tanpa trafilatura
 KNOWN_PLATFORMS = {"dealls", "glints", "kalibrr", "jobstreet"}
-PLAYWRIGHT_PLATFORMS = {"glints", "jobstreet"}
+PLAYWRIGHT_DETAIL_PLATFORMS = {"glints", "jobstreet"}
+PLAYWRIGHT_LISTING_PLATFORMS = {"jobstreet"}
+PLAYWRIGHT_PLATFORMS = PLAYWRIGHT_DETAIL_PLATFORMS | PLAYWRIGHT_LISTING_PLATFORMS
 
 HEADERS = {
     "User-Agent": (
@@ -198,7 +200,9 @@ def fetch_page(url: str, timeout: int = DEFAULT_TIMEOUT) -> Optional[RawPage]:
         page_type = classify_page(url, title or "")
         fetch_method = "requests"
 
-        if platform in PLAYWRIGHT_PLATFORMS and page_type in {"listing", "detail"}:
+        needs_listing_render = platform in PLAYWRIGHT_LISTING_PLATFORMS and page_type == "listing"
+        needs_detail_render = platform in PLAYWRIGHT_DETAIL_PLATFORMS and page_type == "detail"
+        if needs_listing_render or needs_detail_render:
             rendered_html = fetch_rendered_html(url)
             if rendered_html:
                 html = rendered_html
