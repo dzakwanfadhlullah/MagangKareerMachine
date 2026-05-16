@@ -65,6 +65,11 @@ def is_bad_page(title: str, text: str, status_code: int) -> tuple[bool, str]:
     return False, ""
 
 
+def is_blocked_text(text: str) -> bool:
+    text_lower = text.lower()
+    return any(signal in text_lower for signal in SKIP_SIGNALS)
+
+
 def extract_text_bs4(html: str) -> Optional[str]:
     """Ekstrak teks dari HTML menggunakan BeautifulSoup (cepat)."""
     try:
@@ -216,11 +221,20 @@ def fetch_page(url: str, timeout: int = DEFAULT_TIMEOUT) -> Optional[RawPage]:
         if not text:
             text = ""
 
-        is_bad, reason = is_bad_page(title or "", text, status_code)
-        if is_bad:
-            return None
-
         page_type = classify_page(url, title or "")
+        allow_short_spa_listing = (
+            platform in PLAYWRIGHT_PLATFORMS
+            and page_type == "listing"
+            and len(html) > 1000
+            and not is_blocked_text(text)
+            and status_code not in [401, 403, 429]
+        )
+
+        is_bad, reason = is_bad_page(title or "", text, status_code)
+        if is_bad and not allow_short_spa_listing:
+            return None
+        if allow_short_spa_listing and len(text.strip()) < 200:
+            text = f"{title or platform} listing page\n{text}".strip()
 
         return RawPage(
             url=url,

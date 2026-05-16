@@ -5,7 +5,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from engine.fetcher import extract_structured_text
+from engine.fetcher import extract_structured_text, is_bad_page
 from engine.listing_parser import extract_detail_links_from_listing
 
 
@@ -70,3 +70,10 @@ def test_spa_listing_falls_back_to_playwright(monkeypatch):
     assert len(links) == 1
     assert links[0].url.endswith("/id/en/opportunities/jobs/frontend-dev/abc123")
     print("[PASS] SPA listing fallback to Playwright")
+
+
+def test_short_page_is_bad_by_default():
+    is_bad, reason = is_bad_page("Short", "tiny", 200)
+    assert is_bad is True
+    assert reason == "Content too short"
+    print("[PASS] short page remains bad by default")
