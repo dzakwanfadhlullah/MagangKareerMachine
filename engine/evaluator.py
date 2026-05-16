@@ -8,7 +8,12 @@ from typing import Optional
 from rich.console import Console
 from rich.table import Table
 
-from engine.extractor import detect_internship, extract_opportunity, load_keywords
+from engine.extractor import (
+    detect_internship,
+    extract_all_with_rejections,
+    load_keywords,
+    normalize_target_category,
+)
 from engine.models import RawPage
 from engine.scorer import score_opportunity
 
@@ -28,6 +33,8 @@ class EvalPrediction:
     true_category: Optional[str]
     pred_category: Optional[str]
     score: int
+    target_category: Optional[str] = None
+    rejection_reason: Optional[str] = None
 
     @property
     def outcome(self) -> str:
@@ -79,9 +86,15 @@ def _normalize_role(value: object) -> Optional[str]:
     return aliases.get(role, role)
 
 
-def _prediction_from_row(row: dict, min_score: int) -> EvalPrediction:
+def _prediction_from_row(
+    row: dict,
+    min_score: int,
+    target_category: Optional[str] = None,
+) -> EvalPrediction:
     url = row.get("url") or f"eval://{row.get('title', 'untitled')}"
     title = row.get("title") or ""
+    row_target = normalize_target_category(row.get("target_category")) if row.get("target_category") else None
+    active_target = row_target or normalize_target_category(target_category)
     text_parts = [
         title,
         row.get("company") or "",
@@ -100,13 +113,15 @@ def _prediction_from_row(row: dict, min_score: int) -> EvalPrediction:
         status_code=200,
         page_type="detail",
     )
-    opp = extract_opportunity(page)
+    opportunities, rejections = extract_all_with_rejections([page], target_category=active_target)
+    opp = opportunities[0] if opportunities else None
     if opp:
         opp = score_opportunity(opp)
 
     pred_should_save = bool(opp and opp.score >= min_score)
     pred_role = _normalize_role(opp.role if opp else None)
     pred_category = _normalize_label(opp.category if opp else None)
+    rejection_reason = rejections[0].rejection_reason if rejections else None
 
     return EvalPrediction(
         url=url,
@@ -120,6 +135,8 @@ def _prediction_from_row(row: dict, min_score: int) -> EvalPrediction:
         true_category=_normalize_label(row.get("true_category")),
         pred_category=pred_category,
         score=opp.score if opp else 0,
+        target_category=active_target,
+        rejection_reason=rejection_reason,
     )
 
 
@@ -127,7 +144,11 @@ def _safe_div(num: int, den: int) -> float:
     return num / den if den else 0.0
 
 
-def evaluate_dataset(dataset_path: str, min_score: int = 40) -> dict:
+def evaluate_dataset(
+    dataset_path: str,
+    min_score: int = 40,
+    target_category: Optional[str] = None,
+) -> dict:
     """Evaluate extractor/scorer output against a labeled CSV dataset."""
     path = Path(dataset_path)
     if not path.exists():
@@ -136,7 +157,11 @@ def evaluate_dataset(dataset_path: str, min_score: int = 40) -> dict:
     with path.open("r", encoding="utf-8-sig", newline="") as f:
         rows = list(csv.DictReader(f))
 
-    predictions = [_prediction_from_row(row, min_score) for row in rows]
+    normalized_target = normalize_target_category(target_category)
+    predictions = [
+        _prediction_from_row(row, min_score, target_category=normalized_target)
+        for row in rows
+    ]
     tp = sum(1 for p in predictions if p.outcome == "TP")
     fp = sum(1 for p in predictions if p.outcome == "FP")
     fn = sum(1 for p in predictions if p.outcome == "FN")
@@ -161,6 +186,7 @@ def evaluate_dataset(dataset_path: str, min_score: int = 40) -> dict:
         "recall": _safe_div(tp, tp + fn),
         "internship_accuracy": _safe_div(internship_correct, len(predictions)),
         "role_accuracy": _safe_div(role_correct, len(role_labeled)),
+        "target_category": normalized_target,
         "predictions": predictions,
     }
     return metrics
@@ -170,6 +196,8 @@ def print_eval_report(metrics: dict, show_errors: int = 20) -> None:
     """Render a compact CLI report for evaluation metrics."""
     console.rule("[bold cyan]MagangKareer Evaluation[/bold cyan]")
     console.print(f"Total samples: {metrics['total']}")
+    if metrics.get("target_category"):
+        console.print(f"Target category/role: [bold]{metrics['target_category']}[/bold]")
     console.print(
         "Precision: "
         f"[bold]{metrics['precision']:.2f}[/bold] | "
@@ -198,6 +226,7 @@ def print_eval_report(metrics: dict, show_errors: int = 20) -> None:
     table.add_column("True Role", max_width=18)
     table.add_column("Pred Role", max_width=18)
     table.add_column("Score", justify="right", width=6)
+    table.add_column("Reason", max_width=24)
 
     for pred in rows[:show_errors]:
         err_type = pred.outcome
@@ -209,6 +238,7 @@ def print_eval_report(metrics: dict, show_errors: int = 20) -> None:
             pred.true_role or "-",
             pred.pred_role or "-",
             str(pred.score),
+            pred.rejection_reason or "-",
         )
 
     console.print(table)

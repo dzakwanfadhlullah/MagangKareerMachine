@@ -375,8 +375,13 @@ def validate_results(
 def eval_dataset(
     dataset: str = typer.Option("data/golden_dataset.csv", "--dataset", "-d", help="Path CSV golden dataset"),
     min_score: int = typer.Option(40, "--min-score", help="Minimum score counted as saved"),
+    target_category: Optional[str] = typer.Option(
+        None,
+        "--target-category",
+        help="Evaluate as targeted search/crawl, e.g. actuarial, frontend, data_analyst",
+    ),
     show_errors: int = typer.Option(20, "--show-errors", help="Max error rows to display"),
 ):
     """Evaluate extractor/scorer against a labeled golden dataset."""
-    metrics = evaluate_dataset(dataset, min_score=min_score)
+    metrics = evaluate_dataset(dataset, min_score=min_score, target_category=target_category)
     print_eval_report(metrics, show_errors=show_errors)
