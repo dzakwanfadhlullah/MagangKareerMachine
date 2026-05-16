@@ -32,10 +32,62 @@ from engine.db import (
     save_opportunity,
     save_rejected_candidate,
     get_existing_urls,
+    get_raw_pages_by_urls,
 )
 from engine.exporter import export_all
 
 console = Console()
+
+
+def _raw_page_from_dict(row: dict, force_page_type: Optional[str] = None) -> RawPage:
+    """Build RawPage from cached DB row."""
+    return RawPage(
+        url=row["url"],
+        title=row.get("title"),
+        text_content=row.get("text_content") or "",
+        html_content=row.get("html_content") or "",
+        status_code=row.get("status_code") or 200,
+        page_type=force_page_type or row.get("page_type") or "unknown",
+        source_platform=row.get("source_platform"),
+    )
+
+
+def _fetch_or_load_results(raw_results, workers: int, timeout: int) -> list[RawPage]:
+    """Fetch uncached search/listing URLs and load cached pages for the rest."""
+    urls = [result.url for result in raw_results]
+    existing = get_existing_urls()
+    cached_rows = get_raw_pages_by_urls([url for url in urls if url in existing])
+    cached_pages = [_raw_page_from_dict(row) for row in cached_rows]
+    if cached_pages:
+        console.print(f"  [dim]Loaded {len(cached_pages)} cached pages[/dim]")
+
+    fetched_pages = fetch_all(raw_results, existing, workers=workers, timeout=timeout)
+    for page in fetched_pages:
+        save_raw_page(page.model_dump())
+
+    by_url = {page.url: page for page in cached_pages}
+    by_url.update({page.url: page for page in fetched_pages})
+    return [by_url[url] for url in urls if url in by_url]
+
+
+def _fetch_or_load_detail_urls(urls: list[str], workers: int, timeout: int) -> list[RawPage]:
+    """Fetch uncached detail URLs and load cached detail pages for the rest."""
+    existing = get_existing_urls()
+    cached_rows = get_raw_pages_by_urls([url for url in urls if url in existing])
+    cached_pages = [_raw_page_from_dict(row, force_page_type="detail") for row in cached_rows]
+    if cached_pages:
+        console.print(f"  [dim]Loaded {len(cached_pages)} cached detail pages[/dim]")
+
+    fetched_pages = fetch_detail_urls(urls, existing, workers=workers, timeout=timeout)
+    for page in fetched_pages:
+        save_raw_page(page.model_dump())
+
+    by_url = {page.url: page for page in cached_pages}
+    by_url.update({page.url: page for page in fetched_pages})
+    pages = [by_url[url] for url in urls if url in by_url]
+    for page in pages:
+        mark_crawl_done(page.url)
+    return pages
 
 
 def _early_filter_links(links: list[dict]) -> list[dict]:
@@ -192,15 +244,11 @@ def run_crawl_sources(
 
     # --- Step 2: Fetch listing pages ---
     console.print(f"\n[bold]Step 2:[/bold] Fetching listings ({workers} workers, {timeout}s timeout)...")
-    existing = get_existing_urls()
-    pages = fetch_all(raw_results, existing, workers=workers, timeout=timeout)
+    pages = _fetch_or_load_results(raw_results, workers=workers, timeout=timeout)
 
     if not pages:
-        console.print("[yellow][WARN][/yellow] No pages fetched")
+        console.print("[yellow][WARN][/yellow] No pages fetched or cached")
         return 0
-
-    for page in pages:
-        save_raw_page(page.model_dump())
 
     # --- Stage 1: Extract detail links ---
     listing_pages = [p for p in pages if p.page_type == "listing"]
@@ -233,12 +281,7 @@ def run_crawl_sources(
         # Fetch details — concurrent
         console.print(f"\n[bold]Stage 1b:[/bold] Fetching details ({workers} workers)...")
         detail_urls = [link["url"] for link in all_links]
-        existing = get_existing_urls()
-        new_pages = fetch_detail_urls(detail_urls, existing, workers=workers, timeout=timeout)
-
-        for page in new_pages:
-            save_raw_page(page.model_dump())
-            mark_crawl_done(page.url)
+        new_pages = _fetch_or_load_detail_urls(detail_urls, workers=workers, timeout=timeout)
 
         detail_pages.extend(new_pages)
     else:
@@ -295,15 +338,11 @@ def run_search_pipeline(
 
     # Step 3: Fetch
     console.print(f"\n[bold]Step 3:[/bold] Fetching ({workers} workers, {timeout}s timeout)...")
-    existing = get_existing_urls()
-    pages = fetch_all(raw_results, existing, workers=workers, timeout=timeout)
+    pages = _fetch_or_load_results(raw_results, workers=workers, timeout=timeout)
 
     if not pages:
-        console.print("[yellow][WARN][/yellow] No pages fetched")
+        console.print("[yellow][WARN][/yellow] No pages fetched or cached")
         return 0
-
-    for page in pages:
-        save_raw_page(page.model_dump())
 
     # Stage 1: Extract detail links from listings
     listing_pages = [p for p in pages if p.page_type == "listing"]
@@ -326,12 +365,7 @@ def run_search_pipeline(
 
             console.print(f"\n[bold]Stage 1b:[/bold] Fetching {len(all_links)} details...")
             detail_urls = [link["url"] for link in all_links]
-            existing = get_existing_urls()
-            new_pages = fetch_detail_urls(detail_urls, existing, workers=workers, timeout=timeout)
-
-            for page in new_pages:
-                save_raw_page(page.model_dump())
-                mark_crawl_done(page.url)
+            new_pages = _fetch_or_load_detail_urls(detail_urls, workers=workers, timeout=timeout)
 
             detail_pages.extend(new_pages)
 

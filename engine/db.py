@@ -202,6 +202,24 @@ def save_raw_page(page: dict, db_path: Optional[str] = None) -> bool:
         conn.close()
 
 
+def get_raw_pages_by_urls(urls: list[str], db_path: Optional[str] = None) -> list[dict]:
+    """Ambil raw_pages berdasarkan daftar URL, mempertahankan urutan input."""
+    if not urls:
+        return []
+
+    unique_urls = list(dict.fromkeys(urls))
+    placeholders = ",".join("?" for _ in unique_urls)
+    conn = get_connection(db_path)
+    rows = conn.execute(
+        f"SELECT * FROM raw_pages WHERE url IN ({placeholders})",
+        unique_urls,
+    ).fetchall()
+    conn.close()
+
+    by_url = {row["url"]: dict(row) for row in rows}
+    return [by_url[url] for url in unique_urls if url in by_url]
+
+
 def save_crawl_queue(links: list[dict], db_path: Optional[str] = None) -> int:
     """Simpan detail links ke crawl queue. Return jumlah yang disimpan."""
     conn = get_connection(db_path)
