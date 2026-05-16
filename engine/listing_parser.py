@@ -426,7 +426,11 @@ class ProspleAdapter(PlatformAdapter):
 
             if is_listing_url(full_url):
                 continue
-            if not re.search(r"/jobs-internships/|/job/|/graduate-employers/.+/jobs", path, re.IGNORECASE):
+            if not re.search(
+                r"/jobs-internships/|/job/|/graduate-employers/.+/(?:jobs|jobs-internships|graduate-jobs-internships)/",
+                path,
+                re.IGNORECASE,
+            ):
                 continue
 
             if full_url in seen:
@@ -436,6 +440,32 @@ class ProspleAdapter(PlatformAdapter):
             links.append(DetailLink(
                 url=full_url,
                 title=a.get_text(strip=True) or None,
+                source_platform="prosple",
+                listing_url=url,
+            ))
+
+        script_urls = _extract_urls_from_text(
+            html,
+            [
+                r"https?://(?:id\.)?prosple\.com/[^\s\"'<>]*?(?:jobs-internships|graduate-jobs-internships|/job/)[^\s\"'<>]+",
+                r"/[^\s\"'<>]*?(?:jobs-internships|graduate-jobs-internships|job)/[^\s\"'<>]+",
+            ],
+            "https://id.prosple.com",
+        )
+        for full_url in script_urls:
+            if full_url in seen or is_listing_url(full_url):
+                continue
+            path = urlparse(full_url).path
+            if not re.search(
+                r"/jobs-internships/|/job/|/graduate-employers/.+/(?:jobs|jobs-internships|graduate-jobs-internships)/",
+                path,
+                re.IGNORECASE,
+            ):
+                continue
+            seen.add(full_url)
+            links.append(DetailLink(
+                url=full_url,
+                title=None,
                 source_platform="prosple",
                 listing_url=url,
             ))

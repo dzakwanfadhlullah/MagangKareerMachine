@@ -196,13 +196,14 @@ def test_tier2_adapters():
     prosple_html = """
     <html><body>
         <a href="/graduate-employers/example/jobs-internships/software-engineer-intern">Software Intern</a>
+        <a href="/graduate-employers/example/graduate-jobs-internships/data-analyst-intern">Data Intern</a>
         <a href="/lowongan-magang-indonesia">Listing</a>
     </body></html>
     """
     prosple_links = ProspleAdapter().extract_detail_links(
         "https://id.prosple.com/lowongan-magang-indonesia", prosple_html
     )
-    assert len(prosple_links) == 1
+    assert len(prosple_links) == 2
 
     indeed_html = """
     <html><body>
@@ -217,6 +218,22 @@ def test_tier2_adapters():
     print("[PASS] Tier 2 adapters")
 
 
+def test_prosple_adapter_extracts_script_state_links():
+    html = r"""
+    <html><body>
+      <script>
+      window.__STATE__ = {"url":"\/graduate-employers\/example\/jobs-internships\/qa-intern"};
+      </script>
+    </body></html>
+    """
+    links = ProspleAdapter().extract_detail_links(
+        "https://id.prosple.com/lowongan-magang-indonesia", html
+    )
+    assert len(links) == 1
+    assert links[0].url == "https://id.prosple.com/graduate-employers/example/jobs-internships/qa-intern"
+    print("[PASS] ProspleAdapter script-state links")
+
+
 if __name__ == "__main__":
     test_detect_platform()
     test_is_listing_url()
@@ -229,4 +246,5 @@ if __name__ == "__main__":
     test_jobstreet_adapter()
     test_jobstreet_adapter_extracts_script_state_links()
     test_tier2_adapters()
+    test_prosple_adapter_extracts_script_state_links()
     print("\n[OK] All listing_parser tests passed!")
