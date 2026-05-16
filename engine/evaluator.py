@@ -8,7 +8,7 @@ from typing import Optional
 from rich.console import Console
 from rich.table import Table
 
-from engine.extractor import extract_opportunity
+from engine.extractor import detect_internship, extract_opportunity, load_keywords
 from engine.models import RawPage
 from engine.scorer import score_opportunity
 
@@ -90,6 +90,7 @@ def _prediction_from_row(row: dict, min_score: int) -> EvalPrediction:
         row.get("true_location") or "",
     ]
     text = "\n".join(part for part in text_parts if part)
+    pred_is_internship, _, _ = detect_internship(text, title, load_keywords())
 
     page = RawPage(
         url=url,
@@ -113,7 +114,7 @@ def _prediction_from_row(row: dict, min_score: int) -> EvalPrediction:
         true_should_save=_parse_bool(row.get("should_save")),
         pred_should_save=pred_should_save,
         true_is_internship=_parse_bool(row.get("true_is_internship")),
-        pred_is_internship=bool(opp and opp.is_internship),
+        pred_is_internship=pred_is_internship,
         true_role=_normalize_role(row.get("true_role")),
         pred_role=pred_role,
         true_category=_normalize_label(row.get("true_category")),

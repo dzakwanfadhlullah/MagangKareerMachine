@@ -328,6 +328,20 @@ def test_extract_listing_rejection_reason():
     print("[PASS] listing rejection reason")
 
 
+def test_extract_suspicious_intern_rejected():
+    page = RawPage(
+        url="https://example.com/jobs/content-creator-intern",
+        title="Content Creator Intern",
+        text_content="Program magang content creator social media affiliate campaign. Apply sekarang. Jakarta.",
+        status_code=200, page_type="detail",
+    )
+    opp, rejection = extract_opportunity_with_rejection(page)
+    assert opp is None
+    assert rejection is not None
+    assert rejection.rejection_reason.startswith("suspicious_role")
+    print(f"[PASS] suspicious intern rejected -> {rejection.rejection_reason}")
+
+
 def test_extract_valid_intern():
     page = RawPage(
         url="https://dealls.com/loker/frontend-intern~pt-example",
@@ -425,6 +439,7 @@ if __name__ == "__main__":
     test_extract_non_internship_rejected()
     test_extract_rejection_reason()
     test_extract_listing_rejection_reason()
+    test_extract_suspicious_intern_rejected()
     test_extract_valid_intern()
     test_extract_architect_intern()
     test_listing_title_rejected()

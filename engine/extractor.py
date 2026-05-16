@@ -449,6 +449,15 @@ def extract_opportunity_with_rejection(
         role_conf = max(0, role_conf - 50)
         if role_conf < 60:
             role = None
+        if role is None:
+            return None, build_rejected_candidate(
+                page,
+                f"suspicious_role:{suspicious}",
+                title=title,
+                text=text,
+                internship_confidence=intern_conf,
+                role_confidence=role_conf,
+            )
 
     category = detect_category(role) if role and role_conf >= 60 else None
 
