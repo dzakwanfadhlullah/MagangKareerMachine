@@ -77,3 +77,10 @@ def test_short_page_is_bad_by_default():
     assert is_bad is True
     assert reason == "Content too short"
     print("[PASS] short page remains bad by default")
+
+
+def test_late_access_denied_text_does_not_block_valid_page():
+    text = "Valid internship listing content " * 80 + " access denied "
+    is_bad, reason = is_bad_page("Internship Jobs", text, 200)
+    assert is_bad is False
+    print("[PASS] late access denied app-state text ignored")

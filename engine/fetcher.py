@@ -53,11 +53,12 @@ def is_binary_url(url: str) -> bool:
 def is_bad_page(title: str, text: str, status_code: int) -> tuple[bool, str]:
     text_lower = text.lower()
     title_lower = (title or "").lower()
+    guard_text = f"{title_lower}\n{text_lower[:1200]}"
 
     if status_code in [401, 403, 429]:
         return True, f"HTTP {status_code}"
     for signal in SKIP_SIGNALS:
-        if signal in text_lower:
+        if signal in guard_text:
             return True, f"Skip signal: {signal}"
     for signal in LOGIN_SIGNALS:
         if signal in title_lower and len(text) < 1000:
