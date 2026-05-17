@@ -562,6 +562,7 @@ def detect_duration(text: str) -> Optional[str]:
 def extract_company_from_title(title: str) -> Optional[str]:
     """Extract company from common platform title patterns."""
     patterns = [
+        r"^(.+?)\s+membuka\s+lowongan\b",
         r"\bdi\s+(.+?)(?:,\s*\||\s*\|\s*Glints|$)",
         r"\bat\s+(.+?)(?:,\s*\||\s*\|\s*Glints|$)",
         r"\bjobs?\s+at\s+(.+?)(?:,\s*\||\s*\|\s*Glints|$)",
@@ -583,6 +584,8 @@ def is_valid_company(company: Optional[str]) -> bool:
     value = re.sub(r"\s+", " ", company).strip()
     lowered = value.lower()
     if len(value) < 2 or len(value) > 80:
+        return False
+    if lowered in {"indonesia", "linkedin", "glints", "jobstreet"}:
         return False
     if len(value.split()) > 8:
         return False

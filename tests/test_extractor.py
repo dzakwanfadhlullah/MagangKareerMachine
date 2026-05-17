@@ -340,6 +340,11 @@ def test_company_validation_and_title_fallback():
     assert detect_company("Company: OPPO Indonesia", "Software Engineer Internship") == "OPPO Indonesia"
     assert detect_company("company: Business Web Solutions", "Web Developer Intern") == "Business Web Solutions"
     assert not is_valid_company("Indonesia | LinkedIn")
+    assert not is_valid_company("Indonesia")
+    assert detect_company(
+        "",
+        "Starpixel membuka lowongan Unity Game Developer Intern di Indonesia | LinkedIn",
+    ) == "Starpixel"
 
 
 def test_strict_duration():
