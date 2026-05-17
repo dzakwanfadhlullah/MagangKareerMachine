@@ -34,7 +34,6 @@ BAD_PATH_PATTERNS = [
 ]
 
 RESEARCH_LISTING_URL_PATTERNS = [
-    r"jobstreet\.[^/]+/[^?#]*-jobs(?:[?#]|$)",
     r"linkedin\.com/jobs/(?!view/)[^?#]*-jobs(?:[?#]|$)",
     r"jora\.com/lowongan-[^?#]*-di-[^?#]+",
     r"indeed\.[^/]+/q-[^?#]*lowongan",
@@ -50,6 +49,8 @@ SOURCE_QUALITY = {
     "prosple": 8,
     "generic": 4,
 }
+
+FOLLOWABLE_LISTING_PLATFORMS = {"dealls", "glints", "kalibrr", "jobstreet", "prosple", "lokerid", "indeed"}
 
 
 def is_direct_detail_url(url: str) -> bool:
@@ -69,6 +70,8 @@ def is_bad_research_url(url: str) -> bool:
     lowered = url.lower()
     if any(re.search(pattern, lowered) for pattern in BAD_PATH_PATTERNS):
         return True
+    if detect_platform(url) in FOLLOWABLE_LISTING_PLATFORMS and is_listing_url(url):
+        return False
     return any(re.search(pattern, lowered) for pattern in RESEARCH_LISTING_URL_PATTERNS)
 
 
@@ -102,7 +105,7 @@ def score_research_url(result: RawSearchResult, target_category: str | None = No
     if any(signal in text for signal in ["closed", "ditutup", "expired"]):
         score -= 60
     if is_listing_url(result.url):
-        score -= 50
+        score -= 20
     return score
 
 
@@ -121,4 +124,28 @@ def rank_research_results(
         scored.append((score, result))
 
     scored.sort(key=lambda item: item[0], reverse=True)
-    return [result for _, result in scored[:max_urls]]
+
+    selected = []
+    selected_urls = set()
+    for _, result in scored:
+        platform = result.source_platform or detect_platform(result.url)
+        if platform in selected_urls:
+            continue
+        if any((item.source_platform or detect_platform(item.url)) == platform for item in selected):
+            continue
+        selected.append(result)
+        selected_urls.add(result.url)
+        if len(selected) >= min(max_urls, 6):
+            break
+
+    for _, result in scored:
+        if len(selected) >= max_urls:
+            break
+        if result.url in selected_urls:
+            continue
+        selected.append(result)
+        selected_urls.add(result.url)
+        if len(selected) >= max_urls:
+            break
+
+    return selected

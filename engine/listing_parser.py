@@ -95,6 +95,7 @@ LISTING_URL_PATTERNS = [
     r"^/job-board",
     r"^/jobs/?$",
     r"^/id/[^/]+-jobs$",           # jobstreet: /id/frontend-developer-internship-jobs
+    r"^/[^/]+-jobs$",              # jobstreet/id subdomain: /frontend-developer-internship-jobs
     r"^/id-ID/home",               # kalibrr listing
     r"^/id-ID/job-board",
     r"/search",

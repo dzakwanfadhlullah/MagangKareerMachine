@@ -39,6 +39,8 @@ def test_research_queries_include_site_specific_direct_job_queries():
     assert queries[0] == '"frontend developer intern" "Indonesia"'
     assert any(query.startswith("site:dealls.com/loker") for query in queries)
     assert any("site:glints.com/id/opportunities/jobs" in query for query in queries)
+    assert any("site:kalibrr.id" in query for query in queries)
+    assert any("site:jobstreet.co.id/id" in query for query in queries)
     assert len(queries) == len(set(queries))
     assert len(queries) <= 20
 

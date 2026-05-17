@@ -88,7 +88,7 @@ def test_url_ranker_prefers_direct_intern_detail():
     assert rank_research_results([listing, direct], target_category="tech", max_urls=1) == [direct]
 
 
-def test_url_ranker_rejects_search_result_pages():
+def test_url_ranker_keeps_followable_platform_listings_only():
     jobstreet_listing = RawSearchResult(
         query="q",
         title="Backend Developer Internship Jobs in Indonesia",
@@ -123,4 +123,4 @@ def test_url_ranker_rejects_search_result_pages():
         max_urls=10,
     )
 
-    assert ranked == [linkedin_detail]
+    assert ranked == [linkedin_detail, jobstreet_listing]

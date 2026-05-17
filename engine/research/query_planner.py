@@ -90,6 +90,16 @@ SITE_TEMPLATES = [
     'site:jobs.sea.deloitte.com "{term}" "{location}"',
 ]
 
+PLATFORM_TEMPLATES = [
+    'site:dealls.com/loker "{term}" "Lamar Cepat"',
+    'site:glints.com/id/opportunities/jobs "{term}" "{location}"',
+    'site:kalibrr.id "{term}" "internship"',
+    'site:jobstreet.co.id/id "{term}" "internship"',
+    'site:id.prosple.com "{term}" "{location}"',
+    'site:suitmedia.com/careers "{term}" "intern"',
+    'site:jobs.sea.deloitte.com "{term}" "internship"',
+]
+
 
 def _dedupe(items: list[str]) -> list[str]:
     seen = set()
@@ -131,10 +141,16 @@ def plan_research_queries(
     if has_user_query:
         planned.append(f'"{query.strip()}" "{location}"')
 
-        # Fast profiles only run a small number of queries, so put site-specific
-        # direct-detail searches before broad generic expansions.
-        for term in terms[:4]:
-            for template in SITE_TEMPLATES:
+        # Fast profiles only run a small number of queries, so first spread
+        # role-aware terms across platforms instead of spending all slots on
+        # one broad user query.
+        role_terms = terms[1:8] if len(terms) > 1 else terms
+        for idx, template in enumerate(PLATFORM_TEMPLATES):
+            term = role_terms[idx % len(role_terms)]
+            planned.append(template.format(term=term, location=location))
+
+        for term in role_terms[:3]:
+            for template in SITE_TEMPLATES[:4]:
                 planned.append(template.format(term=term, location=location))
 
     for term in terms:
