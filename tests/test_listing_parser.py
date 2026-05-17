@@ -181,6 +181,23 @@ def test_jobstreet_adapter_extracts_script_state_links():
     print("[PASS] JobstreetAdapter script-state links")
 
 
+def test_jobstreet_adapter_extracts_card_company():
+    adapter = JobstreetAdapter()
+    html = """
+    <html><body>
+      <article data-testid="job-card" data-job-id="91761487">
+        <a data-automation="jobTitle" href="/job/91761487?type=standard">Software Engineer Internship</a>
+        <a data-automation="jobCompany" href="/OPPO-jobs">OPPO Indonesia</a>
+      </article>
+    </body></html>
+    """
+    links = adapter.extract_detail_links("https://id.jobstreet.com/web-developer-internship-jobs", html)
+    assert len(links) == 1
+    assert links[0].title == "Software Engineer Internship"
+    assert links[0].company == "OPPO Indonesia"
+    assert links[0].discovery_method == "card"
+
+
 def test_tier2_adapters():
     loker_html = """
     <html><body>

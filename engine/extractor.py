@@ -586,6 +586,8 @@ def is_valid_company(company: Optional[str]) -> bool:
         return False
     if len(value.split()) > 8:
         return False
+    if "|" in value:
+        return False
     if any(term in lowered for term in COMPANY_DESCRIPTION_TERMS):
         return False
     if re.search(r"[!?;:]{1}", value):

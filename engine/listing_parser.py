@@ -358,6 +358,33 @@ class JobstreetAdapter(PlatformAdapter):
         links = []
         seen = set()
 
+        for article in soup.select('[data-testid="job-card"], article[data-job-id]'):
+            title_node = article.select_one('[data-automation="jobTitle"], [data-testid="job-card-title"]')
+            href = title_node.get("href") if title_node else None
+            if not href:
+                link_node = article.find("a", href=re.compile(r"/(?:id/)?job/\d+"))
+                href = link_node.get("href") if link_node else None
+            if not href or not re.search(r"/(?:id/)?job/\d+", href):
+                continue
+
+            full_url = urljoin("https://www.jobstreet.co.id", href)
+            if full_url in seen or is_listing_url(full_url):
+                continue
+            seen.add(full_url)
+
+            company_node = article.select_one('[data-automation="jobCompany"]')
+            title = title_node.get_text(" ", strip=True) if title_node else None
+            company = company_node.get_text(" ", strip=True) if company_node else None
+
+            links.append(DetailLink(
+                url=full_url,
+                title=title,
+                company=company,
+                source_platform="jobstreet",
+                listing_url=url,
+                discovery_method="card",
+            ))
+
         for a in soup.find_all("a", href=True):
             href = a["href"]
 

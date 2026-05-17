@@ -35,6 +35,7 @@ from engine.scorer import score_all
 console = Console()
 
 FOLLOWUP_PLATFORM_MIN_QUOTA = 3
+JOBSTREET_SYNTHETIC_INTERNSHIP_TERMS = ("intern", "internship", "magang", "apprentice", "trainee", "ojt", "pkl")
 
 PLATFORM_QUERY_MARKERS = {
     "dealls": "site:dealls.com",
@@ -167,6 +168,7 @@ def _build_research_metadata(
     initial_fetch_failures: dict[str, int],
     followup_results: list[RawSearchResult],
     followup_fetch_failures: dict[str, int],
+    synthetic_pages: list[RawPage],
     workers: int,
     timeout: int,
 ) -> dict:
@@ -204,6 +206,8 @@ def _build_research_metadata(
         "followup_fetched_pages_by_platform": _platform_counts(followup_pages),
         "followup_verified_pages": len(followup_verified_pages),
         "followup_verified_pages_by_platform": _platform_counts(followup_verified_pages),
+        "synthetic_verified_pages": len(synthetic_pages),
+        "synthetic_verified_pages_by_platform": _platform_counts(synthetic_pages),
         "verified_pages": len(verified_pages),
         "verified_pages_by_platform": _platform_counts(verified_pages),
         "accepted_results": len(opportunities),
@@ -294,16 +298,51 @@ def _detail_links_to_search_results(links: list[DetailLink]) -> list[RawSearchRe
         if link.url in seen:
             continue
         seen.add(link.url)
+        snippet_parts = ["detail link discovered from research listing"]
+        if link.company:
+            snippet_parts.append(f"Company: {link.company}")
         results.append(RawSearchResult(
             query=f"listing-followup:{link.listing_url}",
             title=link.title or "",
-            snippet="detail link discovered from research listing",
+            snippet="\n".join(snippet_parts),
             url=link.url,
             source=link.discovery_method,
             page_type="detail",
             source_platform=link.source_platform or detect_platform(link.url),
         ))
     return results
+
+
+def _build_jobstreet_card_fallback_page(result: RawSearchResult) -> Optional[RawPage]:
+    """Build a conservative Jobstreet detail page from listing-card metadata.
+
+    Jobstreet sometimes renders a generic search shell for direct detail URLs in
+    anonymous Playwright sessions. If the listing card already provides a direct
+    detail URL plus an explicit internship title, keep that as a low-scope
+    verified page so the normal extractor/filter/scorer still decides.
+    """
+    if (result.source_platform or detect_platform(result.url)) != "jobstreet":
+        return None
+    title = (result.title or "").strip()
+    title_lower = title.lower()
+    if not title or not any(term in title_lower for term in JOBSTREET_SYNTHETIC_INTERNSHIP_TERMS):
+        return None
+    text = "\n".join(part for part in [
+        title,
+        result.snippet or "",
+        "Source: Jobstreet listing card",
+        "Status: active or listed in current search results",
+    ] if part).strip()
+    return RawPage(
+        url=result.url,
+        title=title,
+        text_content=text,
+        html_content="",
+        status_code=200,
+        page_type="detail",
+        source_platform="jobstreet",
+        fetch_method="jobstreet-card-fallback",
+    )
 
 
 def run_research_pipeline(
@@ -370,6 +409,7 @@ def run_research_pipeline(
             initial_fetch_failures={},
             followup_results=[],
             followup_fetch_failures={},
+            synthetic_pages=[],
             workers=workers,
             timeout=timeout,
         ))
@@ -411,6 +451,7 @@ def run_research_pipeline(
             initial_fetch_failures={},
             followup_results=[],
             followup_fetch_failures={},
+            synthetic_pages=[],
             workers=workers,
             timeout=timeout,
         ))
@@ -441,6 +482,7 @@ def run_research_pipeline(
             initial_fetch_failures=initial_fetch_failures,
             followup_results=[],
             followup_fetch_failures={},
+            synthetic_pages=[],
             workers=workers,
             timeout=timeout,
         ))
@@ -451,6 +493,7 @@ def run_research_pipeline(
     listing_detail_links: list[DetailLink] = []
     followup_pages: list[RawPage] = []
     followup_results: list[RawSearchResult] = []
+    synthetic_pages: list[RawPage] = []
     followup_fetch_failures: dict[str, int] = {}
     rejected_counter: Counter = Counter()
     rejection_reason_counter: Counter = Counter()
@@ -494,10 +537,22 @@ def run_research_pipeline(
                 if page.api_responses:
                     save_raw_api_responses([item.model_dump() for item in page.api_responses])
 
+            followup_by_url = {result.url: result for result in followup_results}
             followup_verified_count = 0
             for page in followup_pages:
                 rejection = verify_research_page(page)
                 if rejection:
+                    result = followup_by_url.get(page.url)
+                    fallback_page = (
+                        _build_jobstreet_card_fallback_page(result)
+                        if result and rejection.rejection_reason == "listing_or_category_url"
+                        else None
+                    )
+                    if fallback_page and not verify_research_page(fallback_page):
+                        verified_pages.append(fallback_page)
+                        synthetic_pages.append(fallback_page)
+                        followup_verified_count += 1
+                        continue
                     if save_rejected_candidate(rejection.model_dump()):
                         rejected_count += 1
                         rejected_counter[rejection.source_platform or "unknown"] += 1
@@ -507,6 +562,10 @@ def run_research_pipeline(
                 verified_pages.append(page)
                 followup_verified_count += 1
             console.print(f"  [green][OK][/green] Verified {followup_verified_count} follow-up detail pages")
+            if synthetic_pages:
+                console.print(
+                    f"  [yellow][INFO][/yellow] Added {len(synthetic_pages)} Jobstreet card fallback pages"
+                )
 
     console.print("\n[bold]Step 6:[/bold] Extracting and filtering...")
     opportunities, rejections = extract_all_with_rejections(
@@ -544,6 +603,7 @@ def run_research_pipeline(
             initial_fetch_failures=initial_fetch_failures,
             followup_results=followup_results,
             followup_fetch_failures=followup_fetch_failures,
+            synthetic_pages=synthetic_pages,
             workers=workers,
             timeout=timeout,
         ))
@@ -581,6 +641,7 @@ def run_research_pipeline(
         initial_fetch_failures=initial_fetch_failures,
         followup_results=followup_results,
         followup_fetch_failures=followup_fetch_failures,
+        synthetic_pages=synthetic_pages,
         workers=workers,
         timeout=timeout,
     ))

@@ -9,7 +9,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from engine.db import get_all_opportunities, get_discovery_candidates, get_rejected_candidates
 from engine.models import RawSearchResult
 from engine.research.page_verifier import detect_closed_page, verify_research_page
-from engine.research.research_pipeline import _select_followup_results_with_quota, run_research_pipeline
+from engine.research.research_pipeline import (
+    _build_jobstreet_card_fallback_page,
+    _select_followup_results_with_quota,
+    run_research_pipeline,
+)
 from engine.models import RawPage
 
 
@@ -264,3 +268,22 @@ def test_followup_selection_keeps_platform_quota():
     assert len(selected) == 8
     assert platforms.count("jobstreet") >= 3
     assert platforms.count("glints") >= 3
+
+
+def test_jobstreet_card_fallback_requires_internship_title():
+    good = RawSearchResult(
+        query="listing-followup:https://id.jobstreet.com/web-developer-internship-jobs",
+        title="Software Engineer Internship",
+        snippet="Company: OPPO Indonesia",
+        url="https://www.jobstreet.co.id/job/91761487?type=standard",
+        source="card",
+        page_type="detail",
+        source_platform="jobstreet",
+    )
+    page = _build_jobstreet_card_fallback_page(good)
+    assert page is not None
+    assert page.title == "Software Engineer Internship"
+    assert "Company: OPPO Indonesia" in page.text_content
+
+    bad = good.model_copy(update={"title": "Full Stack Developer"})
+    assert _build_jobstreet_card_fallback_page(bad) is None
