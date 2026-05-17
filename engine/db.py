@@ -2,6 +2,7 @@
 
 import sqlite3
 import os
+import json
 from pathlib import Path
 from typing import Optional
 
@@ -122,12 +123,17 @@ def init_db(db_path: Optional[str] = None) -> None:
             canonical_key TEXT UNIQUE,
             title TEXT,
             company TEXT,
+            company_confidence INTEGER DEFAULT 0,
             role TEXT,
             category TEXT,
             location TEXT,
             work_mode TEXT,
             duration TEXT,
             salary TEXT,
+            salary_raw TEXT,
+            salary_display TEXT,
+            salary_min INTEGER,
+            salary_max INTEGER,
             salary_confidence INTEGER DEFAULT 0,
             deadline TEXT,
             source_url TEXT,
@@ -138,6 +144,7 @@ def init_db(db_path: Optional[str] = None) -> None:
             raw_text TEXT,
             summary TEXT,
             score INTEGER,
+            score_breakdown TEXT,
             confidence INTEGER,
             is_internship INTEGER DEFAULT 0,
             internship_confidence INTEGER DEFAULT 0,
@@ -188,6 +195,12 @@ def init_db(db_path: Optional[str] = None) -> None:
     _ensure_column(cursor, "crawl_queue", "target_score", "INTEGER DEFAULT 0")
     _ensure_column(cursor, "opportunities", "salary_confidence", "INTEGER DEFAULT 0")
     _ensure_column(cursor, "opportunities", "original_url", "TEXT")
+    _ensure_column(cursor, "opportunities", "company_confidence", "INTEGER DEFAULT 0")
+    _ensure_column(cursor, "opportunities", "salary_raw", "TEXT")
+    _ensure_column(cursor, "opportunities", "salary_display", "TEXT")
+    _ensure_column(cursor, "opportunities", "salary_min", "INTEGER")
+    _ensure_column(cursor, "opportunities", "salary_max", "INTEGER")
+    _ensure_column(cursor, "opportunities", "score_breakdown", "TEXT")
 
     conn.commit()
     conn.close()
@@ -402,16 +415,18 @@ def save_opportunity(opp: dict, db_path: Optional[str] = None) -> bool:
         else:
             conn.execute(
                 """INSERT INTO opportunities
-                (canonical_key, title, company, role, category, location, location_area, work_mode,
-                 duration, salary, salary_confidence, deadline, source_url, detail_url, original_url, source_name,
-                 source_platform, raw_text, summary, score, confidence,
+                (canonical_key, title, company, company_confidence, role, category, location, location_area, work_mode,
+                 duration, salary, salary_raw, salary_display, salary_min, salary_max, salary_confidence,
+                 deadline, source_url, detail_url, original_url, source_name,
+                 source_platform, raw_text, summary, score, score_breakdown, confidence,
                  is_internship, internship_confidence, role_confidence,
                  page_type, extraction_status, rejection_reason)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     opp["canonical_key"],
                     opp["title"],
                     opp.get("company"),
+                    opp.get("company_confidence", 0),
                     opp.get("role"),
                     opp.get("category"),
                     opp.get("location"),
@@ -419,6 +434,10 @@ def save_opportunity(opp: dict, db_path: Optional[str] = None) -> bool:
                     opp.get("work_mode"),
                     opp.get("duration"),
                     opp.get("salary"),
+                    opp.get("salary_raw"),
+                    opp.get("salary_display"),
+                    opp.get("salary_min"),
+                    opp.get("salary_max"),
                     opp.get("salary_confidence", 0),
                     opp.get("deadline"),
                     opp["source_url"],
@@ -429,6 +448,7 @@ def save_opportunity(opp: dict, db_path: Optional[str] = None) -> bool:
                     opp.get("raw_text"),
                     opp.get("summary"),
                     opp.get("score", 0),
+                    json.dumps(opp.get("score_breakdown"), ensure_ascii=False) if opp.get("score_breakdown") else None,
                     opp.get("confidence", 0),
                     1 if opp.get("is_internship") else 0,
                     opp.get("internship_confidence", 0),

@@ -16,7 +16,10 @@ from engine.extractor import (
     detect_work_mode,
     detect_deadline,
     detect_salary,
+    normalize_salary,
     detect_duration,
+    detect_company,
+    is_valid_company,
     check_suspicious_role,
     extract_all_with_rejections,
     extract_opportunity,
@@ -314,6 +317,26 @@ def test_strict_salary():
     assert detect_salary("RP,") is None
     assert detect_salary("No salary info") is None
     print("[PASS] strict salary")
+
+
+def test_salary_normalization_for_dashboard():
+    display, low, high = normalize_salary("Rp\n750.000", confidence=80)
+    assert display == "Rp750.000"
+    assert low == 750000
+    assert high == 750000
+    assert normalize_salary("Rp\n750.000", confidence=0) == (None, None, None)
+    display, low, high = normalize_salary("3-5 juta", confidence=80)
+    assert display == "Rp3.000.000 - Rp5.000.000"
+    assert low == 3000000
+    assert high == 5000000
+
+
+def test_company_validation_and_title_fallback():
+    bad = "Membantu pengembangan dan maintenance aplikasi berbasis .NET"
+    title = "Lowongan Intern Full Stack Developer di Pt. BPOSeven Inovasi Indonesia (BENEMICA),  | Glints"
+    assert not is_valid_company(bad)
+    company = detect_company(bad, title)
+    assert company == "Pt. BPOSeven Inovasi Indonesia (BENEMICA)"
 
 
 def test_strict_duration():

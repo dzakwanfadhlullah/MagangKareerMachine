@@ -53,6 +53,12 @@ COMPANY_PATTERNS = [
     r"(?:perusahaan|company)[:\s]+([A-Za-z\s&.]+?)(?:\s*[-\u2013|,.\n])",
 ]
 
+COMPANY_DESCRIPTION_TERMS = [
+    "membantu", "mengembangkan", "maintenance", "melakukan", "bertanggung jawab",
+    "assist", "develop", "maintain", "building", "build", "collaborate",
+    "membuat", "merancang", "mengimplementasikan",
+]
+
 # Word-boundary patterns for internship detection
 _INTERN_PATTERNS = [
     re.compile(r"\bintern\b", re.IGNORECASE),
@@ -479,6 +485,38 @@ def detect_salary(text: str) -> Optional[str]:
     return None
 
 
+def normalize_salary(raw_salary: Optional[str], confidence: int = 0) -> tuple[Optional[str], Optional[int], Optional[int]]:
+    """Return dashboard display plus numeric min/max when extractable."""
+    if not raw_salary or confidence == 0:
+        return None, None, None
+
+    raw = re.sub(r"\s+", "", raw_salary.strip())
+    raw = re.sub(r"^Rp\.?", "Rp", raw, flags=re.IGNORECASE)
+    raw = re.sub(r"^IDR", "Rp", raw, flags=re.IGNORECASE)
+
+    if re.search(r"\b(paidinternship|unpaidinternship|unpaid)\b", raw, re.IGNORECASE):
+        label = raw_salary.strip()
+        return re.sub(r"\s+", " ", label), None, None
+
+    juta_range = re.search(r"(\d+)\s*[-\u2013]\s*(\d+)\s*juta", raw_salary, re.IGNORECASE)
+    if juta_range:
+        low = int(juta_range.group(1)) * 1_000_000
+        high = int(juta_range.group(2)) * 1_000_000
+        return f"Rp{low:,} - Rp{high:,}".replace(",", "."), low, high
+
+    juta = re.search(r"(\d+)\s*juta", raw_salary, re.IGNORECASE)
+    if juta:
+        value = int(juta.group(1)) * 1_000_000
+        return f"Rp{value:,}".replace(",", "."), value, value
+
+    digits = re.sub(r"\D", "", raw_salary)
+    if digits:
+        value = int(digits)
+        return f"Rp{value:,}".replace(",", "."), value, value
+
+    return raw_salary.strip(), None, None
+
+
 def salary_hidden(text: str) -> bool:
     """Detect explicit platform text saying salary is not displayed."""
     lowered = text[:3000].lower()
@@ -521,13 +559,60 @@ def detect_duration(text: str) -> Optional[str]:
     return None
 
 
+def extract_company_from_title(title: str) -> Optional[str]:
+    """Extract company from common platform title patterns."""
+    patterns = [
+        r"\bdi\s+(.+?)(?:,\s*\||\s*\|\s*Glints|$)",
+        r"\bat\s+(.+?)(?:,\s*\||\s*\|\s*Glints|$)",
+        r"\bjobs?\s+at\s+(.+?)(?:,\s*\||\s*\|\s*Glints|$)",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, title or "", re.IGNORECASE)
+        if not match:
+            continue
+        company = match.group(1).strip(" ,-|\n\t")
+        if is_valid_company(company):
+            return company
+    return None
+
+
+def is_valid_company(company: Optional[str]) -> bool:
+    """Reject company values that look like job-description sentences."""
+    if not company:
+        return False
+    value = re.sub(r"\s+", " ", company).strip()
+    lowered = value.lower()
+    if len(value) < 2 or len(value) > 80:
+        return False
+    if len(value.split()) > 8:
+        return False
+    if any(term in lowered for term in COMPANY_DESCRIPTION_TERMS):
+        return False
+    if re.search(r"[!?;:]{1}", value):
+        return False
+    return True
+
+
+def company_confidence(company: Optional[str], title: str = "") -> int:
+    """Coarse confidence score for company extraction."""
+    if not is_valid_company(company):
+        return 0
+    if company and company.lower() in (title or "").lower():
+        return 90
+    return 70
+
+
 def detect_company(text: str, title: str) -> Optional[str]:
+    title_company = extract_company_from_title(title)
+    if title_company:
+        return title_company
+
     combined = f"{title}\n{text[:2000]}"
     for pattern in COMPANY_PATTERNS:
         match = re.search(pattern, combined)
         if match:
             company = match.group(1).strip()
-            if 2 < len(company) < 100:
+            if is_valid_company(company):
                 return company
     return None
 
@@ -639,10 +724,12 @@ def extract_opportunity_with_rejection(
 
     # Strict fields
     deadline = detect_deadline(field_text)
-    salary = detect_salary(field_text)
-    sal_conf = salary_confidence(field_text, salary)
+    salary_raw = detect_salary(field_text)
+    sal_conf = salary_confidence(field_text, salary_raw)
+    salary_display, salary_min, salary_max = normalize_salary(salary_raw, sal_conf)
     duration = detect_duration(field_text)
     company = detect_company(text, title)
+    comp_conf = company_confidence(company, title)
     summary = generate_summary(text)
     canonical_url = canonicalize_url(page.url)
     source_name = get_source_name(canonical_url)
@@ -658,13 +745,18 @@ def extract_opportunity_with_rejection(
     return Opportunity(
         title=opp_title,
         company=company,
+        company_confidence=comp_conf,
         role=role,
         category=category,
         location=location,
         location_area=location_area,
         work_mode=work_mode,
         duration=duration,
-        salary=salary,
+        salary=salary_display,
+        salary_raw=salary_raw,
+        salary_display=salary_display,
+        salary_min=salary_min,
+        salary_max=salary_max,
         salary_confidence=sal_conf,
         deadline=deadline,
         source_url=canonical_url,

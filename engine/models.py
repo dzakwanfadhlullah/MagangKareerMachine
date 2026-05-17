@@ -1,7 +1,7 @@
 """Pydantic data models untuk MagangKareer Engine."""
 
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Any, Optional
 
 
 class RawSearchResult(BaseModel):
@@ -73,6 +73,7 @@ class Opportunity(BaseModel):
 
     title: str
     company: Optional[str] = None
+    company_confidence: int = 0
     role: Optional[str] = None
     category: Optional[str] = None
     location: Optional[str] = None
@@ -80,6 +81,10 @@ class Opportunity(BaseModel):
     work_mode: Optional[str] = None  # remote | hybrid | onsite
     duration: Optional[str] = None
     salary: Optional[str] = None
+    salary_raw: Optional[str] = None
+    salary_display: Optional[str] = None
+    salary_min: Optional[int] = None
+    salary_max: Optional[int] = None
     salary_confidence: int = 0
     deadline: Optional[str] = None
     source_url: str  # Direct detail URL, bukan listing
@@ -90,6 +95,7 @@ class Opportunity(BaseModel):
     raw_text: Optional[str] = None
     summary: Optional[str] = None
     score: int = 0
+    score_breakdown: Optional[dict[str, Any]] = None
     confidence: int = 0
     is_internship: bool = False
     internship_confidence: int = 0

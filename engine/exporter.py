@@ -18,10 +18,11 @@ EXPORT_DIR = os.getenv("EXPORT_DIR", "exports")
 # Kolom untuk ekspor
 EXPORT_COLUMNS = [
     "id", "score", "title", "company", "role", "category",
-    "location", "location_area", "work_mode", "duration", "salary", "salary_confidence", "deadline",
+    "company_confidence", "location", "location_area", "work_mode", "duration",
+    "salary", "salary_raw", "salary_display", "salary_min", "salary_max", "salary_confidence", "deadline",
     "source_name", "source_platform", "source_url", "detail_url", "original_url",
     "is_internship", "internship_confidence", "role_confidence",
-    "page_type", "extraction_status", "summary", "first_seen", "last_seen",
+    "score_breakdown", "page_type", "extraction_status", "summary", "first_seen", "last_seen",
 ]
 
 
@@ -32,10 +33,17 @@ def ensure_export_dir() -> None:
 
 def _clean_opportunities(opportunities: list[dict]) -> list[dict]:
     """Keep only stable export columns."""
-    return [
-        {col: opp.get(col) for col in EXPORT_COLUMNS if col in opp}
-        for opp in opportunities
-    ]
+    cleaned = []
+    for opp in opportunities:
+        row = {col: opp.get(col) for col in EXPORT_COLUMNS if col in opp}
+        breakdown = row.get("score_breakdown")
+        if isinstance(breakdown, str) and breakdown:
+            try:
+                row["score_breakdown"] = json.loads(breakdown)
+            except json.JSONDecodeError:
+                pass
+        cleaned.append(row)
+    return cleaned
 
 
 def export_csv(db_path: Optional[str] = None, output_path: Optional[str] = None) -> str:
