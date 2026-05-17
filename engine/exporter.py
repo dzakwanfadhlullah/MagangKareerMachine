@@ -19,10 +19,14 @@ EXPORT_DIR = os.getenv("EXPORT_DIR", "exports")
 EXPORT_COLUMNS = [
     "id", "score", "title", "company", "role", "category",
     "company_confidence", "location", "location_area", "work_mode", "duration",
-    "salary", "salary_raw", "salary_display", "salary_min", "salary_max", "salary_confidence", "deadline",
+    "salary", "salary_raw", "salary_display", "salary_min", "salary_max", "salary_confidence",
+    "salary_status", "location_status", "duration_status", "deadline_status", "location_confidence", "deadline",
     "source_name", "source_platform", "source_url", "detail_url", "original_url",
     "is_internship", "internship_confidence", "role_confidence",
-    "score_breakdown", "page_type", "extraction_status", "summary", "first_seen", "last_seen",
+    "score_breakdown", "extraction_depth", "verification_level", "dashboard_quality", "active_status",
+    "role_family", "role_group", "role_specialization", "mixed_employment_signal",
+    "summary_short", "source_platform_label", "apply_url", "display_location", "display_salary",
+    "page_type", "extraction_status", "summary", "first_seen", "last_seen",
 ]
 
 

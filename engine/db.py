@@ -135,6 +135,11 @@ def init_db(db_path: Optional[str] = None) -> None:
             salary_min INTEGER,
             salary_max INTEGER,
             salary_confidence INTEGER DEFAULT 0,
+            salary_status TEXT DEFAULT 'not_provided',
+            location_status TEXT DEFAULT 'not_provided',
+            duration_status TEXT DEFAULT 'not_provided',
+            deadline_status TEXT DEFAULT 'not_provided',
+            location_confidence INTEGER DEFAULT 0,
             deadline TEXT,
             source_url TEXT,
             detail_url TEXT,
@@ -145,6 +150,19 @@ def init_db(db_path: Optional[str] = None) -> None:
             summary TEXT,
             score INTEGER,
             score_breakdown TEXT,
+            extraction_depth TEXT DEFAULT 'full_detail',
+            verification_level TEXT DEFAULT 'verified_detail',
+            dashboard_quality TEXT DEFAULT 'medium',
+            active_status TEXT DEFAULT 'unknown',
+            role_family TEXT,
+            role_group TEXT,
+            role_specialization TEXT,
+            mixed_employment_signal INTEGER DEFAULT 0,
+            summary_short TEXT,
+            source_platform_label TEXT,
+            apply_url TEXT,
+            display_location TEXT,
+            display_salary TEXT,
             confidence INTEGER,
             is_internship INTEGER DEFAULT 0,
             internship_confidence INTEGER DEFAULT 0,
@@ -201,6 +219,39 @@ def init_db(db_path: Optional[str] = None) -> None:
     _ensure_column(cursor, "opportunities", "salary_min", "INTEGER")
     _ensure_column(cursor, "opportunities", "salary_max", "INTEGER")
     _ensure_column(cursor, "opportunities", "score_breakdown", "TEXT")
+    _ensure_column(cursor, "opportunities", "salary_status", "TEXT DEFAULT 'not_provided'")
+    _ensure_column(cursor, "opportunities", "location_status", "TEXT DEFAULT 'not_provided'")
+    _ensure_column(cursor, "opportunities", "duration_status", "TEXT DEFAULT 'not_provided'")
+    _ensure_column(cursor, "opportunities", "deadline_status", "TEXT DEFAULT 'not_provided'")
+    _ensure_column(cursor, "opportunities", "location_confidence", "INTEGER DEFAULT 0")
+    _ensure_column(cursor, "opportunities", "extraction_depth", "TEXT DEFAULT 'full_detail'")
+    _ensure_column(cursor, "opportunities", "verification_level", "TEXT DEFAULT 'verified_detail'")
+    _ensure_column(cursor, "opportunities", "dashboard_quality", "TEXT DEFAULT 'medium'")
+    _ensure_column(cursor, "opportunities", "active_status", "TEXT DEFAULT 'unknown'")
+    _ensure_column(cursor, "opportunities", "role_family", "TEXT")
+    _ensure_column(cursor, "opportunities", "role_group", "TEXT")
+    _ensure_column(cursor, "opportunities", "role_specialization", "TEXT")
+    _ensure_column(cursor, "opportunities", "mixed_employment_signal", "INTEGER DEFAULT 0")
+    _ensure_column(cursor, "opportunities", "summary_short", "TEXT")
+    _ensure_column(cursor, "opportunities", "source_platform_label", "TEXT")
+    _ensure_column(cursor, "opportunities", "apply_url", "TEXT")
+    _ensure_column(cursor, "opportunities", "display_location", "TEXT")
+    _ensure_column(cursor, "opportunities", "display_salary", "TEXT")
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS user_applications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id TEXT NOT NULL,
+            opportunity_id INTEGER NOT NULL,
+            status TEXT NOT NULL DEFAULT 'saved',
+            notes TEXT,
+            applied_at DATETIME,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, opportunity_id),
+            FOREIGN KEY(opportunity_id) REFERENCES opportunities(id)
+        )
+    """)
 
     conn.commit()
     conn.close()
@@ -417,11 +468,16 @@ def save_opportunity(opp: dict, db_path: Optional[str] = None) -> bool:
                 """INSERT INTO opportunities
                 (canonical_key, title, company, company_confidence, role, category, location, location_area, work_mode,
                  duration, salary, salary_raw, salary_display, salary_min, salary_max, salary_confidence,
+                 salary_status, location_status, duration_status, deadline_status, location_confidence,
                  deadline, source_url, detail_url, original_url, source_name,
-                 source_platform, raw_text, summary, score, score_breakdown, confidence,
+                 source_platform, raw_text, summary, score, score_breakdown,
+                 extraction_depth, verification_level, dashboard_quality, active_status,
+                 role_family, role_group, role_specialization, mixed_employment_signal,
+                 summary_short, source_platform_label, apply_url, display_location, display_salary,
+                 confidence,
                  is_internship, internship_confidence, role_confidence,
                  page_type, extraction_status, rejection_reason)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     opp["canonical_key"],
                     opp["title"],
@@ -439,6 +495,11 @@ def save_opportunity(opp: dict, db_path: Optional[str] = None) -> bool:
                     opp.get("salary_min"),
                     opp.get("salary_max"),
                     opp.get("salary_confidence", 0),
+                    opp.get("salary_status", "not_provided"),
+                    opp.get("location_status", "not_provided"),
+                    opp.get("duration_status", "not_provided"),
+                    opp.get("deadline_status", "not_provided"),
+                    opp.get("location_confidence", 0),
                     opp.get("deadline"),
                     opp["source_url"],
                     opp.get("detail_url"),
@@ -449,6 +510,19 @@ def save_opportunity(opp: dict, db_path: Optional[str] = None) -> bool:
                     opp.get("summary"),
                     opp.get("score", 0),
                     json.dumps(opp.get("score_breakdown"), ensure_ascii=False) if opp.get("score_breakdown") else None,
+                    opp.get("extraction_depth", "full_detail"),
+                    opp.get("verification_level", "verified_detail"),
+                    opp.get("dashboard_quality", "medium"),
+                    opp.get("active_status", "unknown"),
+                    opp.get("role_family"),
+                    opp.get("role_group"),
+                    opp.get("role_specialization"),
+                    1 if opp.get("mixed_employment_signal") else 0,
+                    opp.get("summary_short"),
+                    opp.get("source_platform_label"),
+                    opp.get("apply_url"),
+                    opp.get("display_location"),
+                    opp.get("display_salary"),
                     opp.get("confidence", 0),
                     1 if opp.get("is_internship") else 0,
                     opp.get("internship_confidence", 0),

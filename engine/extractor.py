@@ -635,6 +635,140 @@ def generate_summary(text: str, max_length: int = 300) -> str:
     return summary
 
 
+def generate_summary_short(summary: Optional[str], max_length: int = 180) -> Optional[str]:
+    """Compact dashboard summary that never exposes raw debug text wholesale."""
+    if not summary:
+        return None
+    compact = re.sub(r"\s+", " ", summary).strip()
+    if len(compact) > max_length:
+        compact = compact[:max_length].rsplit(" ", 1)[0] + "..."
+    return compact
+
+
+def detect_extraction_depth(page: RawPage) -> str:
+    """Classify how much evidence backed this opportunity."""
+    if page.fetch_method == "jobstreet-card-fallback":
+        return "listing_card"
+    if page.source_platform == "linkedin":
+        return "search_snippet"
+    return "full_detail"
+
+
+def detect_verification_level(extraction_depth: str) -> str:
+    if extraction_depth == "full_detail":
+        return "verified_detail"
+    if extraction_depth == "listing_card":
+        return "listed_only"
+    if extraction_depth == "search_snippet":
+        return "search_index_only"
+    return "unknown"
+
+
+def detect_active_status(extraction_depth: str, text: str) -> str:
+    lowered = text.lower()
+    if re.search(r"\bclosed\b|\bexpired\b|\bditutup\b|\bkadaluarsa\b", lowered):
+        return "closed"
+    if extraction_depth == "listing_card":
+        return "listed"
+    if extraction_depth == "search_snippet":
+        return "unknown"
+    if any(signal in lowered for signal in ["apply", "lamar", "daftar", "listed", "posted"]):
+        return "active"
+    return "unknown"
+
+
+def field_status(value: Optional[str], text: str, extraction_depth: str, field: str) -> str:
+    """Explain why optional fields are null without treating valid missing data as false positive."""
+    if value:
+        return "provided"
+    if extraction_depth in {"listing_card", "search_snippet"}:
+        return "unknown_due_to_partial_extraction"
+    lowered = text[:5000].lower()
+    if field == "salary" and salary_hidden(text):
+        return "not_provided"
+    if field == "deadline" and any(signal in lowered for signal in ["closed", "ditutup", "expired"]):
+        return "invalid"
+    return "not_provided"
+
+
+def detect_role_taxonomy(role: Optional[str], title: str, text: str, category: Optional[str]) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    """Return dashboard-friendly role family/group/specialization."""
+    if not role and not category:
+        return None, None, None
+
+    family = category or "general"
+    role_text = f"{title}\n{role or ''}\n{text[:1200]}".lower()
+    specialization = "general"
+
+    specialization_patterns = [
+        ("game", [r"\bunity\b", r"\bgame\b", r"\bunreal\b"]),
+        ("mobile", [r"\bmobile\b", r"\bflutter\b", r"\bandroid\b", r"\bios\b", r"\bkotlin\b", r"\bswift\b"]),
+        ("frontend", [r"\bfront[-\s]?end\b", r"\bfrontend\b", r"\breact\b", r"\bvue\b", r"\bnext\.?js\b"]),
+        ("backend", [r"\bback[-\s]?end\b", r"\bbackend\b", r"\bapi\b", r"\bnode\.?js\b", r"\blaravel\b"]),
+        ("fullstack", [r"\bfull[-\s]?stack\b", r"\bfullstack\b"]),
+        ("web", [r"\bweb developer\b", r"\bweb\b"]),
+        ("data", [r"\bdata analyst\b", r"\bbusiness intelligence\b", r"\bbi\b", r"\bdashboard\b"]),
+        ("qa", [r"\bqa\b", r"\bquality assurance\b", r"\btester\b"]),
+    ]
+    for name, patterns in specialization_patterns:
+        if any(re.search(pattern, role_text) for pattern in patterns):
+            specialization = name
+            break
+
+    if category == "tech":
+        group = "software_engineering" if specialization not in {"data", "qa"} else specialization
+    elif category:
+        group = category
+    else:
+        group = None
+    return family, group, specialization
+
+
+def detect_mixed_employment_signal(title: str, text: str) -> bool:
+    haystack = f"{title}\n{text[:800]}".lower()
+    if not any(term in haystack for term in ["intern", "internship", "magang"]):
+        return False
+    return any(re.search(pattern, haystack) for pattern in [
+        r"\bintern\s*/\s*staff\b",
+        r"\bstaff\s*/\s*intern\b",
+        r"\bintern\s+or\s+staff\b",
+        r"\binternship\s*/\s*full[-\s]?time\b",
+    ])
+
+
+def source_platform_label(platform: Optional[str]) -> Optional[str]:
+    labels = {
+        "glints": "Glints",
+        "dealls": "Dealls",
+        "kalibrr": "Kalibrr",
+        "jobstreet": "Jobstreet",
+        "linkedin": "LinkedIn",
+        "prosple": "Prosple",
+        "indeed": "Indeed",
+        "lokerid": "Loker.id",
+    }
+    return labels.get(platform or "", (platform or "").title() if platform else None)
+
+
+def dashboard_quality(
+    extraction_depth: str,
+    company_conf: int,
+    role_conf: int,
+    summary: Optional[str],
+    source_url: str,
+) -> str:
+    """Quality tier for dashboard display, independent from validity gates."""
+    has_core = bool(source_url and company_conf >= 60 and role_conf >= 60)
+    summary_len = len(summary or "")
+    if extraction_depth == "full_detail" and has_core and summary_len >= 80:
+        return "high"
+    if extraction_depth == "listing_card" and has_core:
+        return "medium"
+    if extraction_depth == "search_snippet" and has_core and summary_len >= 80:
+        return "medium"
+    return "low"
+
+
 def get_source_name(url: str) -> str:
     return urlparse(url).netloc.replace("www.", "")
 
@@ -733,6 +867,9 @@ def extract_opportunity_with_rejection(
     work_mode = detect_work_mode(field_text, config)
 
     # Strict fields
+    extraction_depth = detect_extraction_depth(page)
+    verification_level = detect_verification_level(extraction_depth)
+    active_status = detect_active_status(extraction_depth, field_text)
     deadline = detect_deadline(field_text)
     salary_raw = detect_salary(field_text)
     sal_conf = salary_confidence(field_text, salary_raw)
@@ -741,9 +878,14 @@ def extract_opportunity_with_rejection(
     company = detect_company(text, title)
     comp_conf = company_confidence(company, title)
     summary = generate_summary(text)
+    summary_short = generate_summary_short(summary)
     canonical_url = canonicalize_url(page.url)
     source_name = get_source_name(canonical_url)
     platform = page.source_platform or detect_platform(page.url)
+    role_family, role_group, role_specialization = detect_role_taxonomy(role, title, text, category)
+    mixed_signal = detect_mixed_employment_signal(title, text)
+    location_conf = 80 if location else 0
+    dash_quality = dashboard_quality(extraction_depth, comp_conf, role_conf, summary, canonical_url)
 
     opp_title = (title if title else "Untitled")[:200]
 
@@ -768,6 +910,11 @@ def extract_opportunity_with_rejection(
         salary_min=salary_min,
         salary_max=salary_max,
         salary_confidence=sal_conf,
+        salary_status=field_status(salary_display, field_text, extraction_depth, "salary"),
+        location_status=field_status(location, field_text, extraction_depth, "location"),
+        duration_status=field_status(duration, field_text, extraction_depth, "duration"),
+        deadline_status=field_status(deadline, field_text, extraction_depth, "deadline"),
+        location_confidence=location_conf,
         deadline=deadline,
         source_url=canonical_url,
         detail_url=canonical_url,
@@ -776,7 +923,20 @@ def extract_opportunity_with_rejection(
         source_platform=platform,
         raw_text=text[:5000],
         summary=summary,
+        summary_short=summary_short,
+        source_platform_label=source_platform_label(platform),
+        apply_url=canonical_url,
+        display_location=location if location else ("Belum tersedia" if extraction_depth in {"listing_card", "search_snippet"} else "Tidak dicantumkan"),
+        display_salary=salary_display if salary_display else ("Belum tersedia" if extraction_depth in {"listing_card", "search_snippet"} else "Tidak dicantumkan"),
         score=0,
+        extraction_depth=extraction_depth,
+        verification_level=verification_level,
+        dashboard_quality=dash_quality,
+        active_status=active_status,
+        role_family=role_family,
+        role_group=role_group,
+        role_specialization=role_specialization,
+        mixed_employment_signal=mixed_signal,
         confidence=confidence,
         is_internship=is_intern,
         internship_confidence=intern_conf,

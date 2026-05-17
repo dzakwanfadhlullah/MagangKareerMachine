@@ -5,7 +5,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from engine.db import get_raw_pages_by_urls, init_db, save_raw_page
+from engine.db import get_connection, get_raw_pages_by_urls, init_db, save_raw_page
 
 
 def test_get_raw_pages_by_urls_preserves_input_order(tmp_path):
@@ -50,3 +50,23 @@ def test_get_raw_pages_by_urls_preserves_input_order(tmp_path):
         "https://example.com/b",
     ]
     print("[PASS] cached raw pages preserve input order")
+
+
+def test_user_applications_schema_exists(tmp_path):
+    db_path = str(tmp_path / "schema.db")
+    init_db(db_path)
+
+    conn = get_connection(db_path)
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(user_applications)").fetchall()}
+    conn.close()
+
+    assert {
+        "id",
+        "user_id",
+        "opportunity_id",
+        "status",
+        "notes",
+        "applied_at",
+        "created_at",
+        "updated_at",
+    }.issubset(columns)

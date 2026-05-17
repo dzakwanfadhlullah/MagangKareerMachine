@@ -86,6 +86,11 @@ class Opportunity(BaseModel):
     salary_min: Optional[int] = None
     salary_max: Optional[int] = None
     salary_confidence: int = 0
+    salary_status: str = "not_provided"
+    location_status: str = "not_provided"
+    duration_status: str = "not_provided"
+    deadline_status: str = "not_provided"
+    location_confidence: int = 0
     deadline: Optional[str] = None
     source_url: str  # Direct detail URL, bukan listing
     detail_url: Optional[str] = None
@@ -96,6 +101,19 @@ class Opportunity(BaseModel):
     summary: Optional[str] = None
     score: int = 0
     score_breakdown: Optional[dict[str, Any]] = None
+    extraction_depth: str = "full_detail"  # full_detail | listing_card | search_snippet
+    verification_level: str = "verified_detail"  # verified_detail | listed_only | search_index_only | unknown
+    dashboard_quality: str = "medium"  # high | medium | low
+    active_status: str = "unknown"  # active | listed | unknown | closed
+    role_family: Optional[str] = None
+    role_group: Optional[str] = None
+    role_specialization: Optional[str] = None
+    mixed_employment_signal: bool = False
+    summary_short: Optional[str] = None
+    source_platform_label: Optional[str] = None
+    apply_url: Optional[str] = None
+    display_location: Optional[str] = None
+    display_salary: Optional[str] = None
     confidence: int = 0
     is_internship: bool = False
     internship_confidence: int = 0

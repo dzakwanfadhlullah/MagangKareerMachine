@@ -1,5 +1,6 @@
 """URL utilities shared by discovery, extraction, dedupe, and validation."""
 
+import re
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 TRACKING_PARAMS = {
@@ -26,6 +27,14 @@ def canonicalize_url(url: str) -> str:
     if not parsed.scheme or not parsed.netloc:
         return raw
 
+    netloc = parsed.netloc.lower()
+    path = parsed.path.rstrip("/") or parsed.path
+
+    if "jobstreet.co.id" in netloc or "jobstreet.com" in netloc:
+        match = re.search(r"/(?:id/)?job/(\d+)", path)
+        if match:
+            return urlunparse(("https", "www.jobstreet.co.id", f"/job/{match.group(1)}", "", "", ""))
+
     kept_query = [
         (key, value)
         for key, value in parse_qsl(parsed.query, keep_blank_values=True)
@@ -33,8 +42,8 @@ def canonicalize_url(url: str) -> str:
     ]
     return urlunparse((
         parsed.scheme.lower(),
-        parsed.netloc.lower(),
-        parsed.path.rstrip("/") or parsed.path,
+        netloc,
+        path,
         "",
         urlencode(kept_query),
         "",

@@ -140,6 +140,13 @@ def score_opportunity(
             total += value
             break
 
+    if opp.active_status == "listed":
+        breakdown["active_status_score"] += 5
+        total += 5
+    elif opp.active_status == "active" and breakdown["active_status_score"] == 0:
+        breakdown["active_status_score"] += 8
+        total += 8
+
     # Deadline detected
     if opp.deadline:
         value = scores.get("deadline_detected", 10)
@@ -167,6 +174,13 @@ def score_opportunity(
         breakdown["field_confidence_score"] += value
         total += value
 
+    if opp.extraction_depth == "full_detail":
+        breakdown["field_confidence_score"] += 5
+        total += 5
+    elif opp.extraction_depth == "search_snippet":
+        breakdown["penalty_score"] -= 10
+        total -= 10
+
     # --- Penalties ---
 
     # Bootcamp/course penalty
@@ -189,6 +203,10 @@ def score_opportunity(
         value = penalties.get("expired", -50)
         breakdown["penalty_score"] += value
         total += value
+
+    if opp.mixed_employment_signal:
+        breakdown["penalty_score"] -= 5
+        total -= 5
 
     # Clamp ke 0–100
     total = max(0, min(100, total))
