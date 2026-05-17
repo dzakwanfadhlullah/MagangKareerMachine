@@ -25,6 +25,9 @@ def test_score_high_relevance():
 
     scored = score_opportunity(opp)
     assert scored.score >= 70, f"Expected >= 70, got {scored.score}"
+    assert scored.score_breakdown["final_score"] == scored.score
+    assert scored.score_breakdown["internship_score"] > 0
+    assert scored.score_breakdown["role_match_score"] > 0
     print(f"[PASS] High relevance score: {scored.score}")
 
 
@@ -51,6 +54,7 @@ def test_score_bootcamp_penalty():
 
     scored = score_opportunity(opp)
     assert scored.score < 30, f"Expected < 30 (bootcamp penalty), got {scored.score}"
+    assert scored.score_breakdown["penalty_score"] < 0
     print(f"[PASS] Bootcamp penalty score: {scored.score}")
 
 

@@ -97,6 +97,16 @@ def score_opportunity(
     combined = f"{title_lower} {raw_text}"
 
     total = 0
+    breakdown = {
+        "internship_score": 0,
+        "role_match_score": 0,
+        "source_quality_score": 0,
+        "metadata_completeness_score": 0,
+        "active_status_score": 0,
+        "field_confidence_score": 0,
+        "penalty_score": 0,
+        "final_score": 0,
+    }
 
     # --- Positive Scores ---
 
@@ -105,41 +115,57 @@ def score_opportunity(
     all_intern_terms = intern_cfg.get("strong", []) + intern_cfg.get("weak", []) if isinstance(intern_cfg, dict) else intern_cfg
     for term in all_intern_terms:
         if term.lower() in combined:
-            total += scores.get("internship_detected", 30)
+            value = scores.get("internship_detected", 30)
+            breakdown["internship_score"] += value
+            total += value
             break
 
     # Role detected
     if opp.role:
-        total += scores.get("role_detected", 25)
+        value = scores.get("role_detected", 25)
+        breakdown["role_match_score"] += value
+        total += value
 
     # Location detected
     if opp.location:
-        total += scores.get("location_detected", 10)
+        value = scores.get("location_detected", 10)
+        breakdown["metadata_completeness_score"] += value
+        total += value
 
     # Apply signal
     for signal in APPLY_SIGNALS:
         if signal in combined:
-            total += scores.get("apply_signal", 10)
+            value = scores.get("apply_signal", 10)
+            breakdown["active_status_score"] += value
+            total += value
             break
 
     # Deadline detected
     if opp.deadline:
-        total += scores.get("deadline_detected", 10)
+        value = scores.get("deadline_detected", 10)
+        breakdown["active_status_score"] += value
+        total += value
 
     # Official career source
     source_url = (opp.source_url or "").lower()
     for domain in OFFICIAL_DOMAINS:
         if domain in source_url:
-            total += scores.get("official_career_source", 10)
+            value = scores.get("official_career_source", 10)
+            breakdown["source_quality_score"] += value
+            total += value
             break
 
     # Remote bonus
     if opp.work_mode == "remote":
-        total += scores.get("remote_bonus", 5)
+        value = scores.get("remote_bonus", 5)
+        breakdown["field_confidence_score"] += value
+        total += value
 
     # Paid signal
-    if opp.salary and "unpaid" not in (opp.salary or "").lower():
-        total += scores.get("paid_signal", 5)
+    if (opp.salary_display or opp.salary) and "unpaid" not in (opp.salary_display or opp.salary or "").lower():
+        value = scores.get("paid_signal", 5)
+        breakdown["field_confidence_score"] += value
+        total += value
 
     # --- Penalties ---
 
@@ -149,20 +175,28 @@ def score_opportunity(
     for term in hard_reject:
         if term.lower() in combined:
             if "bootcamp" in term.lower():
-                total += penalties.get("bootcamp", -40)
+                value = penalties.get("bootcamp", -40)
             elif "course" in term.lower() or "kelas" in term.lower():
-                total += penalties.get("course", -35)
+                value = penalties.get("course", -35)
+            else:
+                value = 0
+            breakdown["penalty_score"] += value
+            total += value
             break
 
     # Expired penalty
     if check_expired(opp.deadline):
-        total += penalties.get("expired", -50)
+        value = penalties.get("expired", -50)
+        breakdown["penalty_score"] += value
+        total += value
 
     # Clamp ke 0–100
     total = max(0, min(100, total))
 
     # Update opportunity
     opp.score = total
+    breakdown["final_score"] = total
+    opp.score_breakdown = breakdown
     return opp
 
 
