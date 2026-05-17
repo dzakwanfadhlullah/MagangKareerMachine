@@ -299,6 +299,7 @@ def validate_results(
 ):
     """Quality gate -- validasi data di database."""
     import re
+    import json
     from collections import Counter
     from engine.listing_parser import is_listing_url
     from engine.url_utils import has_tracking_params
@@ -501,7 +502,13 @@ def validate_results(
                 issues.append(f"[TARGET NULL ROLE] {title}")
                 continue
 
-            opportunity = Opportunity(**opp)
+            opportunity_row = dict(opp)
+            if isinstance(opportunity_row.get("score_breakdown"), str) and opportunity_row["score_breakdown"]:
+                try:
+                    opportunity_row["score_breakdown"] = json.loads(opportunity_row["score_breakdown"])
+                except json.JSONDecodeError:
+                    opportunity_row["score_breakdown"] = None
+            opportunity = Opportunity(**opportunity_row)
             if not opportunity_matches_target(opportunity, normalized_target):
                 out_of_target.append(f"{title} -> {opp.get('role') or '-'} / {opp.get('category') or '-'}")
                 issues.append(f"[OUT OF TARGET:{normalized_target}] {title}")
