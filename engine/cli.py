@@ -16,6 +16,7 @@ from engine.db import (
 )
 from engine.pipeline import run_search_pipeline, run_crawl_sources
 from engine.exporter import export_all
+from engine.dashboard import export_dashboard as export_dashboard_files, validate_dashboard_ready as run_dashboard_ready_validation
 from engine.reporter import generate_report
 from engine.evaluator import evaluate_dataset, print_eval_report
 from engine.research.research_pipeline import run_research_pipeline
@@ -266,6 +267,20 @@ def export():
         console.print("[yellow]Belum ada data.[/yellow]")
         return
     export_all()
+
+
+@app.command(name="export-dashboard")
+def export_dashboard(
+    output_dir: Optional[str] = typer.Option(None, "--output-dir", help="Output directory, default exports/dashboard"),
+):
+    """Export dashboard-safe JSON read model."""
+    count = get_opportunity_count()
+    if count == 0:
+        console.print("[yellow]Belum ada data.[/yellow]")
+        return
+    opportunities_path, metadata_path = export_dashboard_files(output_dir=output_dir)
+    console.print(f"[green][OK][/green] Exported dashboard opportunities to {opportunities_path}")
+    console.print(f"[green][OK][/green] Exported dashboard metadata to {metadata_path}")
 
 
 @app.command()
@@ -564,6 +579,38 @@ def validate_results(
                 console.print(f"  ... and {len(warnings) - 25} more")
         else:
             console.print(f"\n[green][PASS][/green] All {total} opportunities passed quality gate!")
+
+
+@app.command(name="validate-dashboard-ready")
+def validate_dashboard_ready(
+    min_results: int = typer.Option(30, "--min-results", help="Warn if accepted opportunities are below this number"),
+):
+    """Validate dashboard contract and readiness."""
+    console.rule("[bold cyan]Dashboard Readiness Gate[/bold cyan]")
+    init_db()
+    issues, warnings, stats = run_dashboard_ready_validation(min_results=min_results)
+
+    console.print(f"\n[bold]Total opportunities:[/bold] {stats.get('result_count', 0)}")
+    console.print(f"  Platforms:                  {stats.get('accepted_by_platform', {})}")
+    console.print(f"  Dashboard quality:          {stats.get('accepted_by_dashboard_quality', {})}")
+    console.print(f"  Extraction depth:           {stats.get('accepted_by_extraction_depth', {})}")
+    console.print(f"  Full-detail by platform:    {stats.get('accepted_full_detail_by_platform', {})}")
+    console.print(f"  Partial by platform:        {stats.get('accepted_partial_by_platform', {})}")
+    console.print(f"  Source diversity warning:   {stats.get('source_diversity_warning')}")
+    console.print(f"  Full-detail diversity warn: {stats.get('full_detail_source_diversity_warning')}")
+
+    if issues:
+        console.print(f"\n[red][FAIL][/red] {len(issues)} dashboard issues:")
+        for issue in issues[:30]:
+            console.print(f"  {issue}")
+        if len(issues) > 30:
+            console.print(f"  ... and {len(issues) - 30} more")
+    elif warnings:
+        console.print(f"\n[yellow][PASS WITH WARNINGS][/yellow] Dashboard contract passes hard gates, {len(warnings)} warnings:")
+        for warning in warnings[:30]:
+            console.print(f"  {warning}")
+    else:
+        console.print("\n[green][PASS][/green] Dashboard-ready contract passed!")
 
 
 @app.command(name="eval")
