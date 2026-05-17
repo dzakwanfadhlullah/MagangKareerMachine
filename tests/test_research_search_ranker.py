@@ -124,6 +124,7 @@ def test_url_ranker_keeps_followable_platform_listings_only():
     )
 
     assert ranked == [linkedin_detail, jobstreet_listing]
+    assert score_research_url(linkedin_listing, target_category="tech") < 0
 
 
 def test_url_ranker_caps_generic_noise():

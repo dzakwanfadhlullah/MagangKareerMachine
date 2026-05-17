@@ -17,6 +17,7 @@ import yaml
 from rich.console import Console
 
 from engine.models import RawPage, Opportunity, RejectedCandidate
+from engine.listing_parser import is_listing_title
 from engine.url_utils import canonicalize_url
 
 console = Console()
@@ -57,6 +58,22 @@ COMPANY_DESCRIPTION_TERMS = [
     "membantu", "mengembangkan", "maintenance", "melakukan", "bertanggung jawab",
     "assist", "develop", "maintain", "building", "build", "collaborate",
     "membuat", "merancang", "mengimplementasikan",
+]
+
+LOCATION_ONLY_COMPANY_PATTERNS = [
+    r"^(?:jakarta|jakarta raya|indonesia|daerah istimewa yogyakarta|yogyakarta|bandung|surabaya|bali)(?:,\s*indonesia)?$",
+]
+
+FOREIGN_LOCATION_TERMS = [
+    r"\bgurugram\b",
+    r"\bgurgaon\b",
+    r"\bindia\b",
+    r"\bdelhi\b",
+    r"\bnoida\b",
+    r"\bbengaluru\b",
+    r"\bbangalore\b",
+    r"\bmumbai\b",
+    r"\bhyderabad\b",
 ]
 
 # Word-boundary patterns for internship detection
@@ -587,6 +604,8 @@ def is_valid_company(company: Optional[str]) -> bool:
         return False
     if lowered in {"indonesia", "linkedin", "glints", "jobstreet"}:
         return False
+    if any(re.search(pattern, lowered) for pattern in LOCATION_ONLY_COMPANY_PATTERNS):
+        return False
     if len(value.split()) > 10:
         return False
     if "|" in value:
@@ -596,6 +615,21 @@ def is_valid_company(company: Optional[str]) -> bool:
     if re.search(r"[!?;:]{1}", value):
         return False
     return True
+
+
+def opportunity_outside_target_location(opp: Opportunity, target_location: Optional[str]) -> bool:
+    """Reject clear foreign results only when the user explicitly searches Indonesia."""
+    if not target_location or "indonesia" not in target_location.lower():
+        return False
+    high_signal_text = " ".join([
+        opp.title or "",
+        opp.company or "",
+        opp.source_url or "",
+        opp.detail_url or "",
+    ]).lower()
+    if not any(re.search(pattern, high_signal_text) for pattern in FOREIGN_LOCATION_TERMS):
+        return False
+    return "indonesia" not in high_signal_text
 
 
 def company_confidence(company: Optional[str], title: str = "") -> int:
@@ -977,6 +1011,7 @@ def extract_all_with_rejections(
     pages: list[RawPage],
     config_path: Optional[Path] = None,
     target_category: Optional[str] = None,
+    target_location: Optional[str] = None,
 ) -> tuple[list[Opportunity], list[RejectedCandidate]]:
     """Extract opportunities and return rejected candidates for audit."""
     opportunities = []
@@ -991,6 +1026,30 @@ def extract_all_with_rejections(
             continue
         opp, rejection = extract_opportunity_with_rejection(page, config_path)
         if opp:
+            if is_listing_title(opp.title):
+                rejections.append(build_rejected_candidate(
+                    page,
+                    "listing_or_category_title",
+                    title=opp.title,
+                    text=opp.raw_text,
+                    internship_confidence=opp.internship_confidence,
+                    role_confidence=opp.role_confidence,
+                    score=opp.score,
+                ))
+                skipped += 1
+                continue
+            if opportunity_outside_target_location(opp, target_location):
+                rejections.append(build_rejected_candidate(
+                    page,
+                    f"out_of_location:{target_location}",
+                    title=opp.title,
+                    text=opp.raw_text,
+                    internship_confidence=opp.internship_confidence,
+                    role_confidence=opp.role_confidence,
+                    score=opp.score,
+                ))
+                skipped += 1
+                continue
             if normalized_target and not check_targeted_internship_title(opp.title):
                 rejections.append(build_rejected_candidate(
                     page,

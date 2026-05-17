@@ -113,6 +113,7 @@ LISTING_URL_PATTERNS = [
 
 # Title listing yang TIDAK boleh jadi opportunity
 LISTING_TITLE_PATTERNS = [
+    r"^\d+\s+(?:pekerjaan|jobs?)\b",
     r"explore jobs",
     r"job vacancy.*opportunit",
     r"lowongan kerja di",
@@ -121,6 +122,7 @@ LISTING_TITLE_PATTERNS = [
     r"cari lowongan",
     r"loker terbaru",
     r"browse jobs",
+    r"anda sudah melihat semua pekerjaan",
 ]
 
 

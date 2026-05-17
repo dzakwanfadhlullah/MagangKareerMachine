@@ -720,6 +720,7 @@ def run_research_pipeline(
     opportunities, rejections = extract_all_with_rejections(
         verified_pages,
         target_category=target_category,
+        target_location=location,
     )
     saved_rejections = 0
     for rejection in rejections:

@@ -556,6 +556,43 @@ def test_active_status_ignores_generic_closed_copy():
     assert detect_active_status("full_detail", "This job is no longer available.") == "closed"
 
 
+def test_extract_rejects_listing_style_title_after_detail_fetch():
+    page = RawPage(
+        url="https://id.linkedin.com/jobs/software-engineer-intern-jobs-jakarta-raya",
+        title="5 pekerjaan Software Engineer Intern di Jakarta Raya, Indonesia",
+        text_content="5 Pekerjaan Software Engineer Intern di Jakarta Raya, Indonesia. Anda sudah melihat semua pekerjaan untuk pencarian ini.",
+        status_code=200,
+        page_type="detail",
+        source_platform="linkedin",
+    )
+    opportunities, rejections = extract_all_with_rejections([page], target_category="tech")
+    assert opportunities == []
+    assert rejections[0].rejection_reason in {"listing_title", "listing_or_category_title"}
+
+
+def test_extract_rejects_clear_foreign_location_for_indonesia_search():
+    page = RawPage(
+        url="https://www.foundit.in/job/back-end-developer-intern-datachannel-gurugram-52540770",
+        title="Back End Developer (Intern) at DataChannel in Gurugram, India",
+        text_content="Back End Developer Intern. Internship backend developer role.",
+        status_code=200,
+        page_type="detail",
+        source_platform="generic",
+    )
+    opportunities, rejections = extract_all_with_rejections(
+        [page],
+        target_category="tech",
+        target_location="Indonesia",
+    )
+    assert opportunities == []
+    assert rejections[0].rejection_reason == "out_of_location:Indonesia"
+
+
+def test_location_text_is_not_valid_company():
+    assert not is_valid_company("Jakarta Raya, Indonesia")
+    assert is_valid_company("PT Sigma Global Teknologi")
+
+
 if __name__ == "__main__":
     # Internship
     test_internship_title_gate()

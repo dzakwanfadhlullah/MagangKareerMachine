@@ -34,7 +34,7 @@ BAD_PATH_PATTERNS = [
 ]
 
 RESEARCH_LISTING_URL_PATTERNS = [
-    r"linkedin\.com/jobs/(?!view/)[^?#]*-jobs(?:[?#]|$)",
+    r"linkedin\.com/jobs/(?!view/)[^?#]*-jobs(?:[/?#-]|$)",
     r"jora\.com/lowongan-[^?#]*-di-[^?#]+",
     r"indeed\.[^/]+/q-[^?#]*lowongan",
     r"/jobs/search",

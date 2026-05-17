@@ -62,6 +62,7 @@ def test_is_listing_title():
     assert is_listing_title("Explore Jobs | Dealls") is True
     assert is_listing_title("Job Vacancy & Opportunities in Indonesia") is True
     assert is_listing_title("Lowongan kerja di Indonesia - Cari Lowongan Kerja") is True
+    assert is_listing_title("5 pekerjaan Software Engineer Intern di Jakarta Raya, Indonesia") is True
     assert is_listing_title("Frontend Developer Intern - PT Example") is False
     assert is_listing_title("") is False
     assert is_listing_title(None) is False
