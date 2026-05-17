@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from engine.db import get_all_opportunities, get_discovery_candidates, get_rejected_candidates
 from engine.models import RawSearchResult
 from engine.research.page_verifier import detect_closed_page, verify_research_page
-from engine.research.research_pipeline import run_research_pipeline
+from engine.research.research_pipeline import _select_followup_results_with_quota, run_research_pipeline
 from engine.models import RawPage
 
 
@@ -233,3 +233,34 @@ def test_research_pipeline_saves_canonical_url_and_original_url(monkeypatch, tmp
     assert opportunity["source_url"] == "https://glints.com/id/opportunities/jobs/frontend-developer-intern/abc"
     assert opportunity["detail_url"] == "https://glints.com/id/opportunities/jobs/frontend-developer-intern/abc"
     assert opportunity["original_url"] == raw_url
+
+
+def test_followup_selection_keeps_platform_quota():
+    results = []
+    for idx in range(12):
+        results.append(RawSearchResult(
+            query="q",
+            title=f"Frontend Developer Intern {idx}",
+            snippet="internship React",
+            url=f"https://glints.com/id/opportunities/jobs/frontend-developer-intern/{idx}",
+            source="test",
+            page_type="detail",
+            source_platform="glints",
+        ))
+    for idx in range(6):
+        results.append(RawSearchResult(
+            query="q",
+            title=f"Backend Developer Internship {idx}",
+            snippet="internship backend",
+            url=f"https://www.jobstreet.co.id/job/{9000 + idx}",
+            source="test",
+            page_type="detail",
+            source_platform="jobstreet",
+        ))
+
+    selected = _select_followup_results_with_quota(results, target_category="tech", max_urls=8)
+    platforms = [result.source_platform for result in selected]
+
+    assert len(selected) == 8
+    assert platforms.count("jobstreet") >= 3
+    assert platforms.count("glints") >= 3

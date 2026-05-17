@@ -34,6 +34,8 @@ from engine.scorer import score_all
 
 console = Console()
 
+FOLLOWUP_PLATFORM_MIN_QUOTA = 3
+
 PLATFORM_QUERY_MARKERS = {
     "dealls": "site:dealls.com",
     "glints": "site:glints.com",
@@ -66,6 +68,84 @@ def _platforms_from_queries(queries: list[str]) -> list[str]:
     return platforms
 
 
+def _nested_reason_counts(reason_counter: Counter) -> dict[str, dict[str, int]]:
+    nested: dict[str, dict[str, int]] = {}
+    for key, count in reason_counter.items():
+        platform, reason = key.split("|", 1)
+        nested.setdefault(platform, {})[reason] = count
+    return nested
+
+
+def _fetch_failures_by_platform(selected_results: list[RawSearchResult], pages: list[RawPage]) -> dict[str, int]:
+    fetched_urls = {page.url for page in pages}
+    selected_by_platform = Counter((result.source_platform or detect_platform(result.url) or "unknown") for result in selected_results)
+    fetched_by_platform = Counter((page.source_platform or detect_platform(page.url) or "unknown") for page in pages)
+    failures = {}
+    for platform, selected_count in selected_by_platform.items():
+        missing = selected_count - fetched_by_platform.get(platform, 0)
+        if missing > 0:
+            failures[platform] = missing
+    return failures
+
+
+def _select_followup_results_with_quota(
+    results: list[RawSearchResult],
+    target_category: Optional[str],
+    max_urls: int,
+) -> list[RawSearchResult]:
+    """Rank follow-up detail URLs while preventing one platform from consuming all slots."""
+    if max_urls <= 0:
+        return []
+
+    grouped: dict[str, list[tuple[int, RawSearchResult]]] = {}
+    for result in results:
+        score = score_research_url(result, target_category=target_category)
+        if score < 0:
+            continue
+        result.snippet = f"{result.snippet or ''}\nresearch_url_score={score}".strip()
+        platform = result.source_platform or detect_platform(result.url) or "unknown"
+        grouped.setdefault(platform, []).append((score, result))
+
+    for items in grouped.values():
+        items.sort(key=lambda item: item[0], reverse=True)
+
+    if not grouped:
+        return []
+
+    platforms = sorted(grouped, key=lambda platform: len(grouped[platform]), reverse=True)
+    per_platform_limit = max(FOLLOWUP_PLATFORM_MIN_QUOTA, (max_urls + len(platforms) - 1) // len(platforms))
+    selected: list[RawSearchResult] = []
+    selected_urls = set()
+
+    made_progress = True
+    while len(selected) < max_urls and made_progress:
+        made_progress = False
+        for platform in platforms:
+            platform_selected = sum(1 for item in selected if (item.source_platform or detect_platform(item.url)) == platform)
+            if platform_selected >= per_platform_limit:
+                continue
+            while grouped[platform]:
+                _, candidate = grouped[platform].pop(0)
+                if candidate.url in selected_urls:
+                    continue
+                selected.append(candidate)
+                selected_urls.add(candidate.url)
+                made_progress = True
+                break
+            if len(selected) >= max_urls:
+                break
+
+    for platform in platforms:
+        while grouped[platform] and len(selected) < max_urls:
+            _, candidate = grouped[platform].pop(0)
+            if candidate.url in selected_urls:
+                continue
+            selected.append(candidate)
+            selected_urls.add(candidate.url)
+
+    return selected
+
+
 def _build_research_metadata(
     *,
     query: Optional[str],
@@ -83,6 +163,10 @@ def _build_research_metadata(
     verified_pages: list[RawPage],
     opportunities,
     rejected_counter: Counter,
+    rejection_reason_counter: Counter,
+    initial_fetch_failures: dict[str, int],
+    followup_results: list[RawSearchResult],
+    followup_fetch_failures: dict[str, int],
     workers: int,
     timeout: int,
 ) -> dict:
@@ -114,6 +198,8 @@ def _build_research_metadata(
         "initial_fetched_pages": len(initial_pages),
         "initial_fetched_pages_by_platform": _platform_counts(initial_pages),
         "followup_discovered_urls": followup_discovered_urls,
+        "followup_selected_urls": len(followup_results),
+        "followup_selected_urls_by_platform": _platform_counts(followup_results),
         "followup_fetched_pages": len(followup_pages),
         "followup_fetched_pages_by_platform": _platform_counts(followup_pages),
         "followup_verified_pages": len(followup_verified_pages),
@@ -124,6 +210,9 @@ def _build_research_metadata(
         "accepted_by_platform": dict(accepted_by_platform),
         "rejected_candidates": sum(rejected_counter.values()),
         "rejected_by_platform": dict(rejected_counter),
+        "rejection_reasons_by_platform": _nested_reason_counts(rejection_reason_counter),
+        "initial_fetch_failed_by_platform": initial_fetch_failures,
+        "followup_fetch_failed_by_platform": followup_fetch_failures,
         "source_diversity_warning": len(accepted_platforms) == 1,
         "searched_urls": len(search_results),
         "selected_urls": len(ranked_results),
@@ -277,6 +366,10 @@ def run_research_pipeline(
             verified_pages=[],
             opportunities=[],
             rejected_counter=Counter(),
+            rejection_reason_counter=Counter(),
+            initial_fetch_failures={},
+            followup_results=[],
+            followup_fetch_failures={},
             workers=workers,
             timeout=timeout,
         ))
@@ -314,6 +407,10 @@ def run_research_pipeline(
             verified_pages=[],
             opportunities=[],
             rejected_counter=Counter(),
+            rejection_reason_counter=Counter(),
+            initial_fetch_failures={},
+            followup_results=[],
+            followup_fetch_failures={},
             workers=workers,
             timeout=timeout,
         ))
@@ -321,6 +418,7 @@ def run_research_pipeline(
 
     console.print(f"\n[bold]Step 4:[/bold] Fetching top URLs ({workers} workers, {timeout}s timeout)...")
     pages = _fetch_or_load_research_results(ranked_results, workers=workers, timeout=timeout)
+    initial_fetch_failures = _fetch_failures_by_platform(ranked_results, pages)
     if not pages:
         console.print("[yellow][WARN][/yellow] No pages fetched")
         export_all(metadata=_build_research_metadata(
@@ -339,6 +437,10 @@ def run_research_pipeline(
             verified_pages=[],
             opportunities=[],
             rejected_counter=Counter(),
+            rejection_reason_counter=Counter(),
+            initial_fetch_failures=initial_fetch_failures,
+            followup_results=[],
+            followup_fetch_failures={},
             workers=workers,
             timeout=timeout,
         ))
@@ -348,7 +450,10 @@ def run_research_pipeline(
     verified_pages = []
     listing_detail_links: list[DetailLink] = []
     followup_pages: list[RawPage] = []
+    followup_results: list[RawSearchResult] = []
+    followup_fetch_failures: dict[str, int] = {}
     rejected_counter: Counter = Counter()
+    rejection_reason_counter: Counter = Counter()
     rejected_count = 0
     for page in pages:
         rejection = verify_research_page(page)
@@ -358,6 +463,7 @@ def run_research_pipeline(
             if save_rejected_candidate(rejection.model_dump()):
                 rejected_count += 1
                 rejected_counter[rejection.source_platform or "unknown"] += 1
+                rejection_reason_counter[f"{rejection.source_platform or 'unknown'}|{rejection.rejection_reason}"] += 1
             continue
         page.page_type = "detail"
         verified_pages.append(page)
@@ -369,7 +475,7 @@ def run_research_pipeline(
             "inside rejected listing pages"
         )
         _save_detail_link_candidates(listing_detail_links, target_category)
-        followup_results = rank_research_results(
+        followup_results = _select_followup_results_with_quota(
             _detail_links_to_search_results(listing_detail_links),
             target_category=target_category,
             max_urls=max(0, max_fetch - len(pages)),
@@ -382,6 +488,7 @@ def run_research_pipeline(
                 workers=workers,
                 timeout=timeout,
             )
+            followup_fetch_failures = _fetch_failures_by_platform(followup_results, followup_pages)
             for page in followup_pages:
                 save_raw_page(page.model_dump())
                 if page.api_responses:
@@ -394,6 +501,7 @@ def run_research_pipeline(
                     if save_rejected_candidate(rejection.model_dump()):
                         rejected_count += 1
                         rejected_counter[rejection.source_platform or "unknown"] += 1
+                        rejection_reason_counter[f"{rejection.source_platform or 'unknown'}|{rejection.rejection_reason}"] += 1
                     continue
                 page.page_type = "detail"
                 verified_pages.append(page)
@@ -410,6 +518,7 @@ def run_research_pipeline(
         if save_rejected_candidate(rejection.model_dump()):
             saved_rejections += 1
             rejected_counter[rejection.source_platform or "unknown"] += 1
+            rejection_reason_counter[f"{rejection.source_platform or 'unknown'}|{rejection.rejection_reason}"] += 1
     if saved_rejections:
         console.print(f"  [dim]Saved {saved_rejections} rejected candidates for audit[/dim]")
 
@@ -431,6 +540,10 @@ def run_research_pipeline(
             verified_pages=verified_pages,
             opportunities=[],
             rejected_counter=rejected_counter,
+            rejection_reason_counter=rejection_reason_counter,
+            initial_fetch_failures=initial_fetch_failures,
+            followup_results=followup_results,
+            followup_fetch_failures=followup_fetch_failures,
             workers=workers,
             timeout=timeout,
         ))
@@ -464,6 +577,10 @@ def run_research_pipeline(
         verified_pages=verified_pages,
         opportunities=opportunities,
         rejected_counter=rejected_counter,
+        rejection_reason_counter=rejection_reason_counter,
+        initial_fetch_failures=initial_fetch_failures,
+        followup_results=followup_results,
+        followup_fetch_failures=followup_fetch_failures,
         workers=workers,
         timeout=timeout,
     ))
