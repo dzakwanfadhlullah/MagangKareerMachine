@@ -50,7 +50,7 @@ COMPANY_PATTERNS = [
     r"(?:at|di|@)\s+([A-Z][A-Za-z\s&.]+?)(?:\s*[-\u2013|,]|\s*$)",
     r"[-\u2013\u2014]\s*(?:PT\.?\s+)?([A-Z][A-Za-z\s&.]+?)(?:\s*[-\u2013|,]|\s*$)",
     r"(?:PT\.?\s+)([A-Z][A-Za-z\s&.]+)",
-    r"(?:perusahaan|company)[:\s]+([A-Za-z\s&.]+?)(?:\s*[-\u2013|,.\n])",
+    r"(?:perusahaan|company)[:\s]+([A-Za-z\s&.]+?)(?:\s*[-\u2013|,.\n]|$)",
 ]
 
 COMPANY_DESCRIPTION_TERMS = [
@@ -611,7 +611,7 @@ def detect_company(text: str, title: str) -> Optional[str]:
 
     combined = f"{title}\n{text[:2000]}"
     for pattern in COMPANY_PATTERNS:
-        match = re.search(pattern, combined)
+        match = re.search(pattern, combined, re.IGNORECASE)
         if match:
             company = match.group(1).strip()
             if is_valid_company(company):

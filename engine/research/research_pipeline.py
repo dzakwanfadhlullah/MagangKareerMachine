@@ -31,6 +31,7 @@ from engine.research.query_planner import plan_research_queries
 from engine.research.search_provider import SearchProvider, search_queries_parallel
 from engine.research.url_ranker import rank_research_results, score_research_url
 from engine.scorer import score_all
+from engine.url_utils import canonicalize_url
 
 console = Console()
 
@@ -293,11 +294,30 @@ def _save_detail_link_candidates(links: list[DetailLink], target_category: Optio
 
 def _detail_links_to_search_results(links: list[DetailLink]) -> list[RawSearchResult]:
     results = []
-    seen = set()
+    best_by_key: dict[str, DetailLink] = {}
+
+    def detail_key(link: DetailLink) -> str:
+        if (link.source_platform or detect_platform(link.url)) == "jobstreet":
+            import re
+            match = re.search(r"/(?:id/)?job/(\d+)", link.url)
+            if match:
+                return f"jobstreet:{match.group(1)}"
+        return canonicalize_url(link.url)
+
+    def richness(link: DetailLink) -> int:
+        return (
+            (30 if link.company else 0)
+            + (20 if link.title else 0)
+            + (10 if link.discovery_method == "card" else 0)
+        )
+
     for link in links:
-        if link.url in seen:
-            continue
-        seen.add(link.url)
+        key = detail_key(link)
+        current = best_by_key.get(key)
+        if current is None or richness(link) > richness(current):
+            best_by_key[key] = link
+
+    for link in best_by_key.values():
         snippet_parts = ["detail link discovered from research listing"]
         if link.company:
             snippet_parts.append(f"Company: {link.company}")

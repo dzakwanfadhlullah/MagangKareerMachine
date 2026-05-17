@@ -337,6 +337,9 @@ def test_company_validation_and_title_fallback():
     assert not is_valid_company(bad)
     company = detect_company(bad, title)
     assert company == "Pt. BPOSeven Inovasi Indonesia (BENEMICA)"
+    assert detect_company("Company: OPPO Indonesia", "Software Engineer Internship") == "OPPO Indonesia"
+    assert detect_company("company: Business Web Solutions", "Web Developer Intern") == "Business Web Solutions"
+    assert not is_valid_company("Indonesia | LinkedIn")
 
 
 def test_strict_duration():

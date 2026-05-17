@@ -11,10 +11,11 @@ from engine.models import RawSearchResult
 from engine.research.page_verifier import detect_closed_page, verify_research_page
 from engine.research.research_pipeline import (
     _build_jobstreet_card_fallback_page,
+    _detail_links_to_search_results,
     _select_followup_results_with_quota,
     run_research_pipeline,
 )
-from engine.models import RawPage
+from engine.models import DetailLink, RawPage
 
 
 class StaticProvider:
@@ -287,3 +288,28 @@ def test_jobstreet_card_fallback_requires_internship_title():
 
     bad = good.model_copy(update={"title": "Full Stack Developer"})
     assert _build_jobstreet_card_fallback_page(bad) is None
+
+
+def test_followup_conversion_prefers_richer_jobstreet_card_metadata():
+    links = [
+        DetailLink(
+            url="https://www.jobstreet.co.id/job/91761487?type=standard&origin=cardTitle",
+            title=None,
+            company=None,
+            source_platform="jobstreet",
+            listing_url="listing",
+            discovery_method="script",
+        ),
+        DetailLink(
+            url="https://www.jobstreet.co.id/id/job/91761487?type=standard&origin=cardTitle",
+            title="Software Engineer Internship",
+            company="OPPO Indonesia",
+            source_platform="jobstreet",
+            listing_url="listing",
+            discovery_method="card",
+        ),
+    ]
+    results = _detail_links_to_search_results(links)
+    assert len(results) == 1
+    assert results[0].title == "Software Engineer Internship"
+    assert "Company: OPPO Indonesia" in (results[0].snippet or "")
