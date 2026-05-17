@@ -20,6 +20,7 @@ from engine.reporter import generate_report
 from engine.evaluator import evaluate_dataset, print_eval_report
 from engine.research.research_pipeline import run_research_pipeline
 from engine.research.profiles import get_research_profile
+from engine.research.search_provider import get_search_provider
 from engine.searcher import get_crawl_profile
 from engine.models import Opportunity
 
@@ -55,6 +56,7 @@ def research(
     workers: Optional[int] = typer.Option(None, "--workers", help="Override concurrent fetch/search workers"),
     timeout: Optional[int] = typer.Option(None, "--timeout", help="Override fetch timeout per page"),
     results_per_query: Optional[int] = typer.Option(None, "--results-per-query", help="Override search hits per query"),
+    provider: str = typer.Option("auto", "--provider", help="Search provider: auto, ddg, brave, serper, tavily"),
 ):
     """Fast research mode: search-index-first direct URL discovery."""
     if not query and not target_category:
@@ -77,6 +79,7 @@ def research(
         timeout=timeout,
         min_score=min_score,
         results_per_query=results_per_query,
+        provider=get_search_provider(provider),
     )
 
 

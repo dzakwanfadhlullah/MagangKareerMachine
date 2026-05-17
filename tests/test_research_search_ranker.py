@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from engine.models import RawSearchResult
 from engine.research.result_normalizer import canonicalize_url, dedupe_results, normalize_search_hit
-from engine.research.search_provider import search_queries_parallel
+from engine.research.search_provider import DuckDuckGoProvider, get_search_provider, search_queries_parallel
 from engine.research.url_ranker import is_direct_detail_url, rank_research_results, score_research_url
 
 
@@ -51,6 +51,16 @@ def test_parallel_search_provider_dedupes_results():
 
     assert len(results) == 1
     assert results[0].source == "fake"
+
+
+def test_search_provider_auto_falls_back_to_ddg_without_keys(monkeypatch):
+    monkeypatch.delenv("BRAVE_SEARCH_API_KEY", raising=False)
+    monkeypatch.delenv("SERPER_API_KEY", raising=False)
+    monkeypatch.delenv("TAVILY_API_KEY", raising=False)
+
+    provider = get_search_provider("auto")
+
+    assert isinstance(provider, DuckDuckGoProvider)
 
 
 def test_url_ranker_prefers_direct_intern_detail():

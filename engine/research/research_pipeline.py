@@ -73,6 +73,7 @@ def _build_research_metadata(
     target_category: Optional[str],
     profile: str,
     min_score: int,
+    search_provider: str,
     queries: list[str],
     search_results: list[RawSearchResult],
     ranked_results: list[RawSearchResult],
@@ -99,6 +100,7 @@ def _build_research_metadata(
 
     return {
         "command": "research",
+        "search_provider": search_provider,
         "query": query,
         "location": location,
         "target_category": target_category,
@@ -235,6 +237,8 @@ def run_research_pipeline(
     workers = min(workers if workers is not None else profile_cfg["workers"], 12)
     timeout = timeout if timeout is not None else profile_cfg["timeout"]
     results_per_query = results_per_query if results_per_query is not None else profile_cfg["results_per_query"]
+    active_provider = provider
+    provider_label = getattr(active_provider, "name", "auto") if active_provider else "auto"
 
     console.rule("[bold cyan]MagangKareer Fast Research[/bold cyan]")
     init_db()
@@ -251,7 +255,7 @@ def run_research_pipeline(
     console.print("\n[bold]Step 2:[/bold] Searching index...")
     search_results = search_queries_parallel(
         queries,
-        provider=provider,
+        provider=active_provider,
         max_results_per_query=results_per_query,
         workers=workers,
     )
@@ -263,6 +267,7 @@ def run_research_pipeline(
             target_category=target_category,
             profile=profile,
             min_score=min_score,
+            search_provider=provider_label,
             queries=queries,
             search_results=[],
             ranked_results=[],
@@ -299,6 +304,7 @@ def run_research_pipeline(
             target_category=target_category,
             profile=profile,
             min_score=min_score,
+            search_provider=provider_label,
             queries=queries,
             search_results=search_results,
             ranked_results=ranked_results,
@@ -323,6 +329,7 @@ def run_research_pipeline(
             target_category=target_category,
             profile=profile,
             min_score=min_score,
+            search_provider=provider_label,
             queries=queries,
             search_results=search_results,
             ranked_results=ranked_results,
@@ -414,6 +421,7 @@ def run_research_pipeline(
             target_category=target_category,
             profile=profile,
             min_score=min_score,
+            search_provider=provider_label,
             queries=queries,
             search_results=search_results,
             ranked_results=ranked_results,
@@ -446,6 +454,7 @@ def run_research_pipeline(
         target_category=target_category,
         profile=profile,
         min_score=min_score,
+        search_provider=provider_label,
         queries=queries,
         search_results=search_results,
         ranked_results=ranked_results,
