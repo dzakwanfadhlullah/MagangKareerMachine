@@ -587,7 +587,7 @@ def is_valid_company(company: Optional[str]) -> bool:
         return False
     if lowered in {"indonesia", "linkedin", "glints", "jobstreet"}:
         return False
-    if len(value.split()) > 8:
+    if len(value.split()) > 10:
         return False
     if "|" in value:
         return False
@@ -613,6 +613,11 @@ def detect_company(text: str, title: str) -> Optional[str]:
         return title_company
 
     combined = f"{title}\n{text[:2000]}"
+    for line in combined.splitlines():
+        if re.match(r"^\s*(?:company|perusahaan)\s*:", line, re.IGNORECASE):
+            company = re.split(r":", line, maxsplit=1)[1].strip()
+            if is_valid_company(company):
+                return company
     for pattern in COMPANY_PATTERNS:
         match = re.search(pattern, combined, re.IGNORECASE)
         if match:
