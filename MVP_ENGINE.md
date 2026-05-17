@@ -80,6 +80,34 @@ User Input (query + location)
 | Konfigurasi   | `pyyaml` + `python-dotenv` |
 | Database      | `sqlite3` (built-in)         |
 
+### Fast Research Provider
+
+`python main.py research` supports selectable search providers:
+
+```bash
+python main.py research --query "frontend developer internship" --provider auto
+python main.py research --query "frontend developer internship" --provider ddg
+python main.py research --query "frontend developer internship" --provider brave
+python main.py research --query "frontend developer internship" --provider serper
+python main.py research --query "frontend developer internship" --provider tavily
+```
+
+Provider behavior:
+
+- `auto` tries official providers when API keys exist, then falls back to DDG.
+- `ddg` is the free default/fallback and can be flaky.
+- `brave`, `serper`, and `tavily` require API keys in `.env`.
+- Never commit API keys.
+
+Environment variables:
+
+```text
+SEARCH_PROVIDER=auto
+BRAVE_SEARCH_API_KEY=
+SERPER_API_KEY=
+TAVILY_API_KEY=
+```
+
 ---
 
 ## 4. Struktur Folder
