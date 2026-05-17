@@ -16,6 +16,7 @@ from engine.extractor import (
     detect_work_mode,
     detect_deadline,
     detect_salary,
+    detect_active_status,
     normalize_salary,
     detect_duration,
     detect_company,
@@ -543,6 +544,16 @@ def test_listing_title_rejected():
     assert ok2 is False, "Explore Jobs should be rejected"
 
     print("[PASS] listing titles rejected")
+
+
+def test_active_status_ignores_generic_closed_copy():
+    text = (
+        "Deskripsi pekerjaan Fullstack Developer IT Intern. "
+        "Apply sekarang melalui platform. "
+        "Generic platform copy says applications may be closed anytime."
+    )
+    assert detect_active_status("full_detail", text) == "active"
+    assert detect_active_status("full_detail", "This job is no longer available.") == "closed"
 
 
 if __name__ == "__main__":

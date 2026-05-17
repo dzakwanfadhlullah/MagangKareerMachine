@@ -665,8 +665,18 @@ def detect_verification_level(extraction_depth: str) -> str:
 
 
 def detect_active_status(extraction_depth: str, text: str) -> str:
-    lowered = text.lower()
-    if re.search(r"\bclosed\b|\bexpired\b|\bditutup\b|\bkadaluarsa\b", lowered):
+    lowered = text[:5000].lower()
+    closed_patterns = [
+        r"\bno longer accepting\b",
+        r"\bnot accepting applications\b",
+        r"\bjob is no longer available\b",
+        r"\bposition is no longer available\b",
+        r"\blowongan ditutup\b",
+        r"\btidak menerima lamaran\b",
+        r"\bkadaluarsa\b",
+        r"\bexpired\b",
+    ]
+    if any(re.search(pattern, lowered) for pattern in closed_patterns):
         return "closed"
     if extraction_depth == "listing_card":
         return "listed"
