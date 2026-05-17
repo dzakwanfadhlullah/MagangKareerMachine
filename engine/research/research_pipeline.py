@@ -527,6 +527,18 @@ def run_research_pipeline(
         max_results_per_query=results_per_query,
         workers=workers,
     )
+    for result in search_results:
+        result.page_type = result.page_type if result.page_type in {"listing", "detail"} else classify_page(result.url, result.title)
+        result.source_platform = result.source_platform or detect_platform(result.url)
+    seed_results = _seed_research_results(query=query, location=location, target_category=target_category)
+    seen_search_urls = {result.url for result in search_results}
+    for seed in seed_results:
+        if seed.url not in seen_search_urls:
+            search_results.append(seed)
+            seen_search_urls.add(seed.url)
+    if seed_results:
+        console.print(f"[cyan][INFO][/cyan] Added {len(seed_results)} deterministic platform seed URLs")
+
     if not search_results:
         console.print("[yellow][WARN][/yellow] No search results")
         export_all(metadata=_build_research_metadata(
@@ -555,17 +567,6 @@ def run_research_pipeline(
         ))
         return 0
 
-    for result in search_results:
-        result.page_type = result.page_type if result.page_type in {"listing", "detail"} else classify_page(result.url, result.title)
-        result.source_platform = result.source_platform or detect_platform(result.url)
-    seed_results = _seed_research_results(query=query, location=location, target_category=target_category)
-    seen_search_urls = {result.url for result in search_results}
-    for seed in seed_results:
-        if seed.url not in seen_search_urls:
-            search_results.append(seed)
-            seen_search_urls.add(seed.url)
-    if seed_results:
-        console.print(f"[cyan][INFO][/cyan] Added {len(seed_results)} deterministic platform seed URLs")
     save_raw_results([result.model_dump() for result in search_results])
 
     console.print("\n[bold]Step 3:[/bold] Ranking direct URLs...")

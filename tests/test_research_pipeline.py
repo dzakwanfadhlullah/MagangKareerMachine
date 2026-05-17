@@ -62,6 +62,13 @@ class ListingProvider:
         ]
 
 
+class EmptyProvider:
+    name = "empty"
+
+    def search(self, query: str, max_results: int):
+        return []
+
+
 def test_page_verifier_rejects_closed_and_listing_pages():
     closed = RawPage(
         url="https://example.com/jobs/frontend",
@@ -326,3 +333,37 @@ def test_research_seeds_include_dealls_kalibrr_and_prosple_for_tech():
 
     assert {"dealls", "kalibrr", "prosple"}.issubset(platforms)
     assert all(seed.page_type == "listing" for seed in seeds)
+
+
+def test_research_pipeline_uses_seed_urls_when_search_index_empty(monkeypatch, tmp_path):
+    db_path = str(tmp_path / "research_seed_fallback.db")
+    export_dir = tmp_path / "exports"
+    monkeypatch.setenv("DB_PATH", db_path)
+    monkeypatch.setenv("EXPORT_DIR", str(export_dir))
+    monkeypatch.setattr("engine.exporter.EXPORT_DIR", str(export_dir))
+    monkeypatch.setattr("engine.research.research_pipeline.export_all.__globals__['EXPORT_DIR']", str(export_dir), raising=False)
+
+    seen_platforms = set()
+
+    def fake_fetch_all(results, existing_urls=None, workers=1, timeout=10):
+        seen_platforms.update(result.source_platform for result in results)
+        return []
+
+    monkeypatch.setattr("engine.research.research_pipeline.fetch_all", fake_fetch_all)
+
+    saved = run_research_pipeline(
+        query="frontend backend fullstack software engineer internship",
+        location="Indonesia",
+        target_category="tech",
+        profile="fast",
+        query_count=1,
+        max_fetch=5,
+        workers=1,
+        timeout=1,
+        provider=EmptyProvider(),
+    )
+
+    assert saved == 0
+    assert {"dealls", "kalibrr", "prosple"}.issubset(seen_platforms)
+    metadata = json.loads((export_dir / "run_metadata.json").read_text(encoding="utf-8"))
+    assert {"dealls", "kalibrr", "prosple"}.issubset(set(metadata["platforms_seeded"]))
