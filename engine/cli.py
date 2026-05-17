@@ -308,6 +308,7 @@ def validate_results(
         normalize_target_category,
         opportunity_matches_target,
         title_has_seniority_without_internship,
+        is_valid_company,
     )
 
     console.rule("[bold cyan]Quality Gate: Validate Results[/bold cyan]")
@@ -375,8 +376,10 @@ def validate_results(
     invalid_salary = []
     salary_contradictions = []
     low_salary_confidence = []
+    salary_display_missing = []
     for opp in opportunities:
         sal = opp.get("salary") or ""
+        salary_raw = opp.get("salary_raw") or sal
         text = f"{opp.get('title') or ''}\n{opp.get('summary') or ''}\n{opp.get('raw_text') or ''}".lower()
         if sal:
             if len(sal) < 4 or re.match(r"^[A-Z]+,?$", sal, re.IGNORECASE) or len(re.findall(r"\d", sal)) > 15:
@@ -388,6 +391,9 @@ def validate_results(
             if (opp.get("salary_confidence") or 0) < 60:
                 low_salary_confidence.append(opp.get("title"))
                 warnings.append(f"[LOW SALARY CONF] {opp.get('title')} | {sal}")
+        if salary_raw and re.search(r"\d", salary_raw) and not opp.get("salary_display"):
+            salary_display_missing.append(opp.get("title"))
+            warnings.append(f"[SALARY DISPLAY MISSING] {opp.get('title')} | raw={salary_raw}")
 
     # Check 5: Invalid duration
     invalid_duration = []
@@ -453,8 +459,18 @@ def validate_results(
     # Check 8c: Field-level warnings
     wfh_mismatch = []
     metadata_low = []
+    bad_company = []
+    low_company_confidence = []
+    high_score_low_metadata = []
     for opp in opportunities:
         text = f"{opp.get('title') or ''}\n{opp.get('summary') or ''}".lower()
+        company = opp.get("company")
+        if company and not is_valid_company(company):
+            bad_company.append(opp.get("title"))
+            issues.append(f"[BAD COMPANY] {opp.get('title')} -> {company}")
+        if not company or (opp.get("company_confidence") or 0) < 60:
+            low_company_confidence.append(opp.get("title"))
+            warnings.append(f"[LOW COMPANY CONF] {opp.get('title')} -> {company or 'null'}")
         if re.search(r"\bwfh\b|\bwork\s+from\s+home\b|\bfull\s+remote\b|\bfully\s+remote\b", text):
             if opp.get("work_mode") != "remote":
                 wfh_mismatch.append(opp.get("title"))
@@ -463,6 +479,9 @@ def validate_results(
         if len(missing_fields) >= 2:
             metadata_low.append(opp.get("title"))
             warnings.append(f"[LOW METADATA] {opp.get('title')} missing {','.join(missing_fields)}")
+        if (opp.get("score") or 0) >= 85 and missing_fields:
+            high_score_low_metadata.append(opp.get("title"))
+            warnings.append(f"[HIGH SCORE LOW METADATA] {opp.get('title')} missing {','.join(missing_fields)}")
 
     platform_counts = Counter(opp.get("source_platform") or "unknown" for opp in opportunities)
     source_diversity_warning = len(platform_counts) == 1 and total > 1
@@ -498,15 +517,18 @@ def validate_results(
     console.print(f"  Bad titles:       [{'red' if bad_titles else 'green'}]{len(bad_titles)}[/]")
     console.print(f"  Non-internship:   [{'red' if non_intern else 'green'}]{len(non_intern)}[/]")
     console.print(f"  Invalid salary:   [{'red' if invalid_salary else 'green'}]{len(invalid_salary)}[/]")
-    console.print(f"  Salary warnings:  [{'yellow' if salary_contradictions or low_salary_confidence else 'green'}]{len(salary_contradictions) + len(low_salary_confidence)}[/]")
+    console.print(f"  Salary warnings:  [{'yellow' if salary_contradictions or low_salary_confidence or salary_display_missing else 'green'}]{len(salary_contradictions) + len(low_salary_confidence) + len(salary_display_missing)}[/]")
     console.print(f"  Invalid duration: [{'red' if invalid_duration else 'green'}]{len(invalid_duration)}[/]")
     console.print(f"  Non-detail:       [{'red' if non_detail else 'green'}]{len(non_detail)}[/]")
     console.print(f"  Closed accepted:  [{'red' if closed_results else 'green'}]{len(closed_results)}[/]")
     console.print(f"  Low role conf:    [{'red' if bad_role_conf else 'green'}]{len(bad_role_conf)}[/]")
     console.print(f"  Suspicious roles: [{'red' if suspicious_cat else 'green'}]{len(suspicious_cat)}[/]")
     console.print(f"  Hard negatives:   [{'red' if hard_negative_results else 'green'}]{len(hard_negative_results)}[/]")
+    console.print(f"  Bad company:      [{'red' if bad_company else 'green'}]{len(bad_company)}[/]")
+    console.print(f"  Low company conf: [{'yellow' if low_company_confidence else 'green'}]{len(low_company_confidence)}[/]")
     console.print(f"  WFH mismatch:     [{'yellow' if wfh_mismatch else 'green'}]{len(wfh_mismatch)}[/]")
     console.print(f"  Low metadata:     [{'yellow' if metadata_low else 'green'}]{len(metadata_low)}[/]")
+    console.print(f"  High score/meta:  [{'yellow' if high_score_low_metadata else 'green'}]{len(high_score_low_metadata)}[/]")
     console.print(f"  Source diversity: [{'yellow' if source_diversity_warning else 'green'}]{len(platform_counts)} platform(s)[/]")
     if normalized_target:
         console.print(f"  Target:           [bold]{normalized_target}[/bold]")
