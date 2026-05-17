@@ -44,8 +44,31 @@ PLATFORM_QUERY_MARKERS = {
     "kalibrr": "site:kalibrr",
     "jobstreet": "site:jobstreet",
     "prosple": "site:prosple",
+    "prosple_id": "site:id.prosple",
     "suitmedia": "site:suitmedia",
     "deloitte": "site:jobs.sea.deloitte",
+}
+
+FOCUS_PLATFORMS = ("dealls", "kalibrr", "jobstreet", "prosple")
+
+RESEARCH_SEEDS = {
+    "tech": [
+        ("dealls", "https://dealls.com/loker/tipe/loker-magang", "Dealls magang listing"),
+        ("dealls", "https://dealls.com/loker", "Dealls loker listing"),
+        ("kalibrr", "https://www.kalibrr.id/id-ID/home/w/100-internship-or-ojt", "Kalibrr internship OJT listing"),
+        ("kalibrr", "https://www.kalibrr.id/id-ID/job-board", "Kalibrr job board"),
+        ("prosple", "https://id.prosple.com/lowongan-magang-indonesia", "Prosple internship Indonesia"),
+    ],
+    "data": [
+        ("dealls", "https://dealls.com/loker/tipe/loker-magang", "Dealls magang listing"),
+        ("kalibrr", "https://www.kalibrr.id/id-ID/home/w/100-internship-or-ojt", "Kalibrr internship OJT listing"),
+        ("prosple", "https://id.prosple.com/lowongan-magang-indonesia", "Prosple internship Indonesia"),
+    ],
+    "actuarial": [
+        ("dealls", "https://dealls.com/loker/tipe/loker-magang", "Dealls magang listing"),
+        ("kalibrr", "https://www.kalibrr.id/id-ID/home/w/100-internship-or-ojt", "Kalibrr internship OJT listing"),
+        ("prosple", "https://id.prosple.com/lowongan-magang-indonesia", "Prosple internship Indonesia"),
+    ],
 }
 
 
@@ -65,9 +88,34 @@ def _platforms_from_queries(queries: list[str]) -> list[str]:
     for query in queries:
         lowered = query.lower()
         for platform, marker in PLATFORM_QUERY_MARKERS.items():
-            if marker in lowered and platform not in platforms:
-                platforms.append(platform)
+            platform_name = "prosple" if platform == "prosple_id" else platform
+            if marker in lowered and platform_name not in platforms:
+                platforms.append(platform_name)
     return platforms
+
+
+def _seed_research_results(
+    *,
+    query: Optional[str],
+    location: str,
+    target_category: Optional[str],
+) -> list[RawSearchResult]:
+    """Add deterministic platform listing seeds so search-index flakiness does not hide core sources."""
+    target = normalize_target_category(target_category) or "tech"
+    seed_defs = RESEARCH_SEEDS.get(target, RESEARCH_SEEDS["tech"])
+    seed_text = " ".join(part for part in [query, target, location, "intern internship magang"] if part)
+    return [
+        RawSearchResult(
+            query=f"seed:{platform}:{target}",
+            title=title,
+            snippet=seed_text,
+            url=url,
+            source="seed",
+            page_type="listing",
+            source_platform=platform,
+        )
+        for platform, url, title in seed_defs
+    ]
 
 
 def _nested_reason_counts(reason_counter: Counter) -> dict[str, dict[str, int]]:
@@ -88,6 +136,46 @@ def _fetch_failures_by_platform(selected_results: list[RawSearchResult], pages: 
         if missing > 0:
             failures[platform] = missing
     return failures
+
+
+def _focus_platform_diagnostics(
+    *,
+    search_results: list[RawSearchResult],
+    ranked_results: list[RawSearchResult],
+    initial_pages: list[RawPage],
+    followup_results: list[RawSearchResult],
+    followup_pages: list[RawPage],
+    verified_pages: list[RawPage],
+    opportunities,
+    rejected_counter: Counter,
+    rejection_reason_counter: Counter,
+    initial_fetch_failures: dict[str, int],
+    followup_fetch_failures: dict[str, int],
+) -> dict[str, dict]:
+    diagnostics = {}
+    raw_counts = _platform_counts(search_results)
+    selected_counts = _platform_counts(ranked_results)
+    initial_counts = _platform_counts(initial_pages)
+    followup_selected_counts = _platform_counts(followup_results)
+    followup_fetched_counts = _platform_counts(followup_pages)
+    verified_counts = _platform_counts(verified_pages)
+    accepted_counts = _platform_counts(opportunities)
+    reason_counts = _nested_reason_counts(rejection_reason_counter)
+    for platform in FOCUS_PLATFORMS:
+        diagnostics[platform] = {
+            "raw_hits": raw_counts.get(platform, 0),
+            "selected_urls": selected_counts.get(platform, 0),
+            "initial_fetched": initial_counts.get(platform, 0),
+            "initial_fetch_failed": initial_fetch_failures.get(platform, 0),
+            "followup_selected": followup_selected_counts.get(platform, 0),
+            "followup_fetched": followup_fetched_counts.get(platform, 0),
+            "followup_fetch_failed": followup_fetch_failures.get(platform, 0),
+            "verified_pages": verified_counts.get(platform, 0),
+            "accepted": accepted_counts.get(platform, 0),
+            "rejected": rejected_counter.get(platform, 0),
+            "rejection_reasons": reason_counts.get(platform, {}),
+        }
+    return diagnostics
 
 
 def _select_followup_results_with_quota(
@@ -174,6 +262,16 @@ def _build_research_metadata(
     timeout: int,
 ) -> dict:
     accepted_by_platform = Counter(opp.source_platform or "unknown" for opp in opportunities)
+    accepted_full_detail_by_platform = Counter(
+        opp.source_platform or "unknown"
+        for opp in opportunities
+        if getattr(opp, "extraction_depth", None) == "full_detail"
+    )
+    accepted_partial_by_platform = Counter(
+        opp.source_platform or "unknown"
+        for opp in opportunities
+        if getattr(opp, "extraction_depth", None) != "full_detail"
+    )
     followup_urls = {page.url for page in followup_pages}
     followup_verified_pages = [
         page for page in verified_pages
@@ -182,6 +280,11 @@ def _build_research_metadata(
     platforms_with_hits = sorted({
         result.source_platform or "unknown"
         for result in search_results
+    })
+    platforms_seeded = sorted({
+        result.source_platform or "unknown"
+        for result in search_results
+        if result.source == "seed"
     })
     accepted_platforms = [platform for platform, count in accepted_by_platform.items() if count > 0]
 
@@ -195,6 +298,7 @@ def _build_research_metadata(
         "min_score": min_score,
         "query_count": len(queries),
         "platforms_queried": _platforms_from_queries(queries),
+        "platforms_seeded": platforms_seeded,
         "platforms_with_hits": platforms_with_hits,
         "raw_results_by_platform": _platform_counts(search_results),
         "selected_urls_by_platform": _platform_counts(ranked_results),
@@ -213,12 +317,28 @@ def _build_research_metadata(
         "verified_pages_by_platform": _platform_counts(verified_pages),
         "accepted_results": len(opportunities),
         "accepted_by_platform": dict(accepted_by_platform),
+        "accepted_full_detail_by_platform": dict(accepted_full_detail_by_platform),
+        "accepted_partial_by_platform": dict(accepted_partial_by_platform),
         "rejected_candidates": sum(rejected_counter.values()),
         "rejected_by_platform": dict(rejected_counter),
         "rejection_reasons_by_platform": _nested_reason_counts(rejection_reason_counter),
         "initial_fetch_failed_by_platform": initial_fetch_failures,
         "followup_fetch_failed_by_platform": followup_fetch_failures,
         "source_diversity_warning": len(accepted_platforms) == 1,
+        "full_detail_source_diversity_warning": len(accepted_full_detail_by_platform) <= 1 and len(opportunities) > 1,
+        "focus_platform_diagnostics": _focus_platform_diagnostics(
+            search_results=search_results,
+            ranked_results=ranked_results,
+            initial_pages=initial_pages,
+            followup_results=followup_results,
+            followup_pages=followup_pages,
+            verified_pages=verified_pages,
+            opportunities=opportunities,
+            rejected_counter=rejected_counter,
+            rejection_reason_counter=rejection_reason_counter,
+            initial_fetch_failures=initial_fetch_failures,
+            followup_fetch_failures=followup_fetch_failures,
+        ),
         "searched_urls": len(search_results),
         "selected_urls": len(ranked_results),
         "fetched_pages": len(initial_pages) + len(followup_pages),
@@ -438,6 +558,14 @@ def run_research_pipeline(
     for result in search_results:
         result.page_type = result.page_type if result.page_type in {"listing", "detail"} else classify_page(result.url, result.title)
         result.source_platform = result.source_platform or detect_platform(result.url)
+    seed_results = _seed_research_results(query=query, location=location, target_category=target_category)
+    seen_search_urls = {result.url for result in search_results}
+    for seed in seed_results:
+        if seed.url not in seen_search_urls:
+            search_results.append(seed)
+            seen_search_urls.add(seed.url)
+    if seed_results:
+        console.print(f"[cyan][INFO][/cyan] Added {len(seed_results)} deterministic platform seed URLs")
     save_raw_results([result.model_dump() for result in search_results])
 
     console.print("\n[bold]Step 3:[/bold] Ranking direct URLs...")

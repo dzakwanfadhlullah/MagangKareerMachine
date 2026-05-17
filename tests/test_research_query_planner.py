@@ -15,7 +15,7 @@ def test_research_profiles():
     deep = get_research_profile("deep")
 
     assert fast["max_fetch"] < normal["max_fetch"] < deep["max_fetch"]
-    assert normal["query_count"] == 24
+    assert normal["query_count"] >= 36
 
 
 def test_tech_target_expands_to_developer_roles():

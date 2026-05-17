@@ -9,11 +9,11 @@ RESEARCH_PROFILES = {
         "results_per_query": 8,
     },
     "normal": {
-        "query_count": 24,
-        "max_fetch": 40,
+        "query_count": 36,
+        "max_fetch": 80,
         "workers": 8,
         "timeout": 10,
-        "results_per_query": 10,
+        "results_per_query": 12,
     },
     "deep": {
         "query_count": 50,

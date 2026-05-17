@@ -12,6 +12,7 @@ from engine.research.page_verifier import detect_closed_page, verify_research_pa
 from engine.research.research_pipeline import (
     _build_jobstreet_card_fallback_page,
     _detail_links_to_search_results,
+    _seed_research_results,
     _select_followup_results_with_quota,
     run_research_pipeline,
 )
@@ -313,3 +314,15 @@ def test_followup_conversion_prefers_richer_jobstreet_card_metadata():
     assert len(results) == 1
     assert results[0].title == "Software Engineer Internship"
     assert "Company: OPPO Indonesia" in (results[0].snippet or "")
+
+
+def test_research_seeds_include_dealls_kalibrr_and_prosple_for_tech():
+    seeds = _seed_research_results(
+        query="frontend backend fullstack software engineer internship",
+        location="Indonesia",
+        target_category="tech",
+    )
+    platforms = {seed.source_platform for seed in seeds}
+
+    assert {"dealls", "kalibrr", "prosple"}.issubset(platforms)
+    assert all(seed.page_type == "listing" for seed in seeds)
