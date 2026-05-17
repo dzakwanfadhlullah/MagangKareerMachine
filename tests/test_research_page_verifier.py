@@ -36,3 +36,16 @@ def test_research_page_verifier_allows_direct_job_detail():
     )
 
     assert verify_research_page(page) is None
+
+
+def test_research_page_verifier_allows_kalibrr_detail_with_listing_like_text():
+    page = RawPage(
+        url="https://www.kalibrr.id/id-ID/c/example/jobs/123/software-engineer-intern",
+        title="Lowongan Kerja Software Engineer Intern di Example",
+        text_content="Lowongan Kerja Software Engineer Intern di Example | Indonesia | Internship",
+        status_code=200,
+        page_type="detail",
+        source_platform="kalibrr",
+    )
+
+    assert verify_research_page(page) is None

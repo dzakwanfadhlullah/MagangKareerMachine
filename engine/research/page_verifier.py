@@ -48,6 +48,7 @@ def detect_listing_page(page: RawPage) -> bool:
 def verify_research_page(page: RawPage) -> Optional[RejectedCandidate]:
     """Return a rejection if a fetched research page should not be extracted."""
     title = page.title or ""
+    direct_detail = is_direct_detail_url(page.url)
     if detect_closed_page(page):
         return build_rejected_candidate(page, "closed", title=title, text=page.text_content)
     if (
@@ -55,8 +56,8 @@ def verify_research_page(page: RawPage) -> Optional[RejectedCandidate]:
         or is_listing_url(page.url)
         or is_listing_title(title)
         or is_bad_research_url(page.url)
-        or not is_direct_detail_url(page.url)
-        or detect_listing_page(page)
+        or not direct_detail
+        or (detect_listing_page(page) and not direct_detail)
     ):
         return build_rejected_candidate(page, "listing_or_category_url", title=title)
     return None

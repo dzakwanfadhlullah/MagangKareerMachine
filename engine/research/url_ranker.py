@@ -50,6 +50,17 @@ SOURCE_QUALITY = {
     "generic": 4,
 }
 
+INITIAL_PLATFORM_CAPS = {
+    "dealls": 8,
+    "glints": 18,
+    "kalibrr": 8,
+    "jobstreet": 18,
+    "prosple": 8,
+    "linkedin": 6,
+    "indeed": 3,
+    "generic": 12,
+}
+
 FOLLOWABLE_LISTING_PLATFORMS = {"dealls", "glints", "kalibrr", "jobstreet", "prosple", "lokerid", "indeed"}
 
 
@@ -142,6 +153,10 @@ def rank_research_results(
         if len(selected) >= max_urls:
             break
         if result.url in selected_urls:
+            continue
+        platform = result.source_platform or detect_platform(result.url)
+        cap = INITIAL_PLATFORM_CAPS.get(platform)
+        if cap is not None and sum(1 for item in selected if (item.source_platform or detect_platform(item.url)) == platform) >= cap:
             continue
         selected.append(result)
         selected_urls.add(result.url)

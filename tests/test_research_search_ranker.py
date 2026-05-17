@@ -124,3 +124,32 @@ def test_url_ranker_keeps_followable_platform_listings_only():
     )
 
     assert ranked == [linkedin_detail, jobstreet_listing]
+
+
+def test_url_ranker_caps_generic_noise():
+    results = [
+        RawSearchResult(
+            query="q",
+            title=f"Frontend tutorial {idx}",
+            snippet="frontend developer intern Indonesia",
+            url=f"https://example{idx}.com/frontend",
+            source="fake",
+            page_type="detail",
+            source_platform="generic",
+        )
+        for idx in range(30)
+    ]
+    results.append(RawSearchResult(
+        query="q",
+        title="Dealls magang listing",
+        snippet="frontend developer intern",
+        url="https://dealls.com/loker/tipe/loker-magang",
+        source="seed",
+        page_type="listing",
+        source_platform="dealls",
+    ))
+
+    ranked = rank_research_results(results, target_category="tech", max_urls=80)
+
+    assert sum(1 for result in ranked if result.source_platform == "generic") <= 12
+    assert any(result.source_platform == "dealls" for result in ranked)

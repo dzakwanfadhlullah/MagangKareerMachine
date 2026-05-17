@@ -669,7 +669,7 @@ def run_research_pipeline(
         followup_results = _select_followup_results_with_quota(
             _detail_links_to_search_results(listing_detail_links),
             target_category=target_category,
-            max_urls=max(0, max_fetch - len(pages)),
+            max_urls=max(max_fetch // 2, max(0, max_fetch - len(pages))),
         )
         if followup_results:
             followup_urls = [result.url for result in followup_results]
