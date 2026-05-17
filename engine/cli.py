@@ -443,7 +443,7 @@ def validate_results(
     hard_negative_results = []
     hard_negative_terms = config.get("negative_terms", {}).get("hard_reject", [])
     for opp in opportunities:
-        text = f"{opp.get('title') or ''}\n{opp.get('summary') or ''}\n{opp.get('raw_text') or ''}".lower()
+        text = f"{opp.get('title') or ''}\n{opp.get('summary') or ''}".lower()
         for term in hard_negative_terms:
             if term.lower() in text:
                 hard_negative_results.append(opp.get("title"))
