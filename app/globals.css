@@ -330,6 +330,36 @@ button {
   color: var(--text-muted);
 }
 
+.page-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.view-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #fff;
+  padding: 3px;
+}
+
+.view-toggle button {
+  min-height: 32px;
+  border-radius: 11px;
+  background: transparent;
+  padding: 0 12px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.view-toggle button.active {
+  background: var(--navy);
+  color: #fff;
+}
+
 .primary-button,
 .secondary-button,
 .ghost-button {
@@ -1048,6 +1078,104 @@ button {
   font-size: 12px;
 }
 
+.kanban-board {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(230px, 1fr));
+  gap: 14px;
+  overflow-x: auto;
+  padding-bottom: 12px;
+}
+
+.kanban-column {
+  min-height: 540px;
+  border: 1px solid var(--border);
+  border-radius: 22px;
+  background: #f8fafc;
+  padding: 12px;
+}
+
+.kanban-column-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding: 4px 4px 0;
+}
+
+.kanban-column-head h2 {
+  margin: 0;
+  font-size: 13px;
+}
+
+.kanban-column-head span {
+  display: grid;
+  height: 24px;
+  min-width: 24px;
+  place-items: center;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.kanban-cards {
+  display: grid;
+  gap: 10px;
+}
+
+.kanban-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: #fff;
+  padding: 14px;
+  box-shadow: var(--shadow-sm);
+}
+
+.kanban-card h3 {
+  margin: 0 0 5px;
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.kanban-card p,
+.kanban-card time {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.kanban-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.kanban-card-meta span {
+  display: inline-flex;
+  min-height: 22px;
+  align-items: center;
+  border-radius: 999px;
+  background: var(--blue-soft);
+  padding: 0 8px;
+  color: var(--blue);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.kanban-add {
+  min-height: 38px;
+  border: 1px dashed #cbd5e1;
+  border-radius: 16px;
+  background: #fff;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
 .skeleton-card,
 .skeleton-drawer {
   display: grid;
@@ -1149,6 +1277,11 @@ button {
 
   .page-header.split {
     flex-direction: column;
+  }
+
+  .page-actions {
+    width: 100%;
+    justify-content: space-between;
   }
 
   .stats-grid,
