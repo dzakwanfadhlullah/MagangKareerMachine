@@ -302,6 +302,34 @@ button {
   line-height: 1.6;
 }
 
+.page-header.split {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.page-search {
+  width: min(360px, 100%);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: var(--shadow-sm);
+}
+
+.page-search input {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  outline: 0;
+  padding: 13px 15px;
+  color: var(--text);
+}
+
+.page-search input::placeholder {
+  color: var(--text-muted);
+}
+
 .primary-button,
 .secondary-button,
 .ghost-button {
@@ -921,6 +949,99 @@ button {
 .skeleton-card p,
 .skeleton-drawer p {
   width: 86%;
+}
+
+.lowongan-page .role-chips {
+  margin-bottom: 20px;
+}
+
+.lowongan-layout {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.results-area {
+  min-width: 0;
+}
+
+.results-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.results-head h2 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.results-head p {
+  margin: 5px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.results-head select {
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #fff;
+  padding: 0 12px;
+  color: var(--text);
+  font-size: 13px;
+}
+
+.job-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+@media (max-width: 1240px) {
+  .job-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 980px) {
+  .lowongan-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .filter-panel {
+    order: 2;
+  }
+
+  .results-area {
+    order: 1;
+  }
+
+  .page-header.split {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 720px) {
+  .job-actions,
+  .results-head,
+  .split-actions {
+    grid-template-columns: 1fr;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .job-actions .primary-button {
+    width: 100%;
+  }
+
+  .detail-drawer {
+    width: 100vw;
+    border-radius: 0;
+  }
 }
 
 @media (max-width: 980px) {
