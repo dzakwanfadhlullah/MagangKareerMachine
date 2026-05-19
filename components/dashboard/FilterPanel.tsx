@@ -1,5 +1,5 @@
 const sections = [
-  { title: "Role", items: ["Frontend", "Backend", "Fullstack", "Mobile", "Data", "AI/ML", "Aktuaria"] },
+  { title: "Peran", items: ["Frontend", "Backend", "Fullstack", "Mobile", "Data", "AI/ML", "Aktuaria"] },
   { title: "Lokasi", items: ["Jakarta", "Bandung", "Surabaya", "Yogyakarta", "Remote", "Indonesia"] },
   { title: "Sistem Kerja", items: ["Remote", "Hybrid", "Onsite"] },
   { title: "Platform", items: ["Glints", "Jobstreet", "LinkedIn", "Dealls", "Kalibrr"] },
@@ -19,7 +19,7 @@ export function FilterPanel({ onReset }: { onReset?: () => void }) {
       </div>
 
       {sections.map((section) => (
-        <details key={section.title} className="filter-section" open={["Role", "Lokasi", "Sistem Kerja"].includes(section.title)}>
+        <details key={section.title} className="filter-section" open={["Peran", "Lokasi", "Sistem Kerja"].includes(section.title)}>
           <summary>{section.title}</summary>
           <div className="filter-options">
             {section.items.map((item) => (

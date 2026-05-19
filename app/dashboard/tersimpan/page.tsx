@@ -29,7 +29,7 @@ export default function TersimpanPage() {
           <p>Peluang yang kamu simpan untuk dipertimbangkan lagi.</p>
         </div>
         <div className="saved-filter-row">
-          <button className="secondary-button" type="button">Role</button>
+          <button className="secondary-button" type="button">Peran</button>
           <button className="secondary-button" type="button">Platform</button>
           <button className="secondary-button" type="button">Status</button>
           <button className="secondary-button" type="button">Kualitas Data</button>

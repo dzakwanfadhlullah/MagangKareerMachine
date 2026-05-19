@@ -53,7 +53,7 @@ export default function LowonganPage() {
           <input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="Cari title, perusahaan, role..."
+            placeholder="Cari judul, perusahaan, peran..."
             aria-label="Cari lowongan"
           />
         </div>

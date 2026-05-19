@@ -33,7 +33,7 @@ export function formatPlatformLabel(platform: string) {
     linkedin: "LinkedIn",
     dealls: "Dealls",
     kalibrr: "Kalibrr",
-    generic: "Generic",
+    generic: "Sumber Umum",
   };
   return labels[platform] || platform;
 }

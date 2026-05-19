@@ -14,7 +14,7 @@ export default function PengaturanPage() {
             <strong>Jakk</strong>
           </div>
           <div className="settings-row">
-            <span>Role</span>
+            <span>Peran</span>
             <strong>Mahasiswa</strong>
           </div>
         </section>
@@ -31,19 +31,19 @@ export default function PengaturanPage() {
         <section className="settings-card">
           <h2>Notifikasi</h2>
           <label className="toggle-row">
-            <span>Email alerts</span>
+            <span>Notifikasi email</span>
             <input type="checkbox" defaultChecked />
           </label>
           <label className="toggle-row">
-            <span>Watchlist alerts</span>
+            <span>Notifikasi watchlist</span>
             <input type="checkbox" defaultChecked />
           </label>
         </section>
 
         <section className="settings-card plan-card">
           <h2>Paket</h2>
-          <p>Current plan: Free</p>
-          <p>Usage: 12 pencarian tersisa</p>
+          <p>Paket saat ini: Gratis</p>
+          <p>Pemakaian: 12 pencarian tersisa</p>
           <button className="primary-button" type="button">Upgrade ke Premium</button>
         </section>
       </div>

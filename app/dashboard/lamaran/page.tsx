@@ -14,7 +14,7 @@ export default function LamaranPage() {
             <button className="active" type="button">
               Kanban
             </button>
-            <button type="button">List</button>
+            <button type="button">Daftar</button>
           </div>
           <button className="primary-button" type="button">
             Tambah Manual
