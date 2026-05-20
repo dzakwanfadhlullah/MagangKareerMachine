@@ -2,6 +2,8 @@ import { CompactJobCard } from "@/components/dashboard/CompactJobCard";
 import { StatCard } from "@/components/dashboard/StatCard";
 import { readDashboardSnapshot } from "@/lib/dashboard/server-data";
 
+export const dynamic = "force-dynamic";
+
 const activities = [
   { title: "Kamu menyimpan lowongan Frontend Developer Intern", time: "2 jam yang lalu" },
   { title: "Kamu mengubah status lamaran Data Analyst Intern ke Screening", time: "5 jam yang lalu" },
