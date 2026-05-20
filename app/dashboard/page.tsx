@@ -1,6 +1,6 @@
 import { CompactJobCard } from "@/components/dashboard/CompactJobCard";
 import { StatCard } from "@/components/dashboard/StatCard";
-import { opportunities } from "@/lib/dashboard/mock-data";
+import { readDashboardSnapshot } from "@/lib/dashboard/server-data";
 
 const activities = [
   { title: "Kamu menyimpan lowongan Frontend Developer Intern", time: "2 jam yang lalu" },
@@ -9,27 +9,34 @@ const activities = [
   { title: "Kamu menyimpan lowongan Backend Developer Intern", time: "Kemarin, 14.12" },
 ];
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const { opportunities, metadata, updatedAt } = await readDashboardSnapshot();
+  const highQuality = metadata.accepted_by_dashboard_quality?.high ?? 0;
+  const fullDetail = metadata.accepted_by_extraction_depth?.full_detail ?? 0;
+  const lastRun = updatedAt
+    ? new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "short" }).format(new Date(updatedAt))
+    : "Belum ada export";
+
   return (
     <div className="page-wrap overview-page">
       <header className="page-header">
         <h1>Selamat datang kembali, Jakk.</h1>
-        <p>Kelola pencarian magang, simpan peluang terbaik, dan lacak progres lamaranmu dalam satu tempat.</p>
+        <p>Dashboard membaca peluang terbaru dari export engine lokal. Terakhir sync: {lastRun}.</p>
       </header>
 
       <section className="stats-grid">
-        <StatCard title="Tersimpan" value="12" helper="Peluang yang kamu simpan" delta="+3 minggu ini" />
-        <StatCard title="Sudah Apply" value="5" helper="Lamaran yang sudah dikirim" delta="+2 minggu ini" />
-        <StatCard title="Interview" value="2" helper="Sedang berjalan" delta="+0 minggu ini" />
-        <StatCard title="Deadline Terdekat" value="3" helper="Butuh perhatian minggu ini" delta="dalam 7 hari" />
+        <StatCard title="Peluang Engine" value={String(opportunities.length)} helper="Data dari engine lokal" delta="auto-refresh di lowongan" />
+        <StatCard title="Kualitas Tinggi" value={String(highQuality)} helper="Dashboard quality high" delta="siap diprioritaskan" />
+        <StatCard title="Detail Lengkap" value={String(fullDetail)} helper="Full-detail extraction" delta="trust paling kuat" />
+        <StatCard title="Platform" value={String(Object.keys(metadata.accepted_by_platform ?? {}).length)} helper="Sumber terdeteksi" delta="diversity check" />
       </section>
 
       <section className="overview-grid">
         <div className="panel-card">
           <div className="section-head">
             <div>
-              <h2>Rekomendasi terbaik hari ini</h2>
-              <p>Dipilih berdasarkan minat, role, dan kualitas data lowongan.</p>
+              <h2>Rekomendasi terbaik dari engine</h2>
+              <p>Dipilih berdasarkan skor, role, dan kualitas data lowongan.</p>
             </div>
             <a href="/dashboard/lowongan">Lihat semua</a>
           </div>

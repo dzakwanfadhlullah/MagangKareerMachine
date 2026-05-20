@@ -1,22 +1,49 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { EmptyState } from "@/components/dashboard/EmptyState";
 import { JobCard } from "@/components/dashboard/JobCard";
-import { opportunities } from "@/lib/dashboard/mock-data";
 import type { Opportunity } from "@/lib/dashboard/types";
 
+function readSavedIds() {
+  if (typeof window === "undefined") return new Set<string>();
+  try {
+    const stored = window.localStorage.getItem("magangkareer_saved_ids");
+    return new Set(stored ? (JSON.parse(stored) as string[]) : []);
+  } catch {
+    return new Set<string>();
+  }
+}
+
 export default function TersimpanPage() {
-  const initialSaved = opportunities.slice(0, 6);
-  const [savedIds, setSavedIds] = useState<Set<string>>(new Set(initialSaved.map((item) => item.id)));
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
+  const [savedIds, setSavedIds] = useState<Set<string>>(readSavedIds);
   const [selected, setSelected] = useState<Opportunity | null>(null);
-  const saved = opportunities.filter((opportunity) => savedIds.has(opportunity.id));
+  const saved = useMemo(
+    () => opportunities.filter((opportunity) => savedIds.has(opportunity.id)),
+    [opportunities, savedIds],
+  );
+
+  useEffect(() => {
+    async function load() {
+      const response = await fetch("/api/opportunities", { cache: "no-store" });
+      if (!response.ok) return;
+      const payload = (await response.json()) as { opportunities: Opportunity[] };
+      setOpportunities(payload.opportunities);
+    }
+
+    const timer = window.setTimeout(() => {
+      void load();
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   function toggleSaved(id: string) {
     setSavedIds((current) => {
       const next = new Set(current);
       if (next.has(id)) next.delete(id);
       else next.add(id);
+      window.localStorage.setItem("magangkareer_saved_ids", JSON.stringify([...next]));
       return next;
     });
   }

@@ -19,6 +19,7 @@ yarn-error.log*
 
 # Data & exports (generated)
 data/*.db
+exports/
 exports/*.csv
 exports/*.json
 exports/*.html
