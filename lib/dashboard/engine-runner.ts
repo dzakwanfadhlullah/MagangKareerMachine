@@ -190,7 +190,7 @@ export async function startEngineRun(request: EngineRunRequest): Promise<EngineR
 
   const child = spawnPython(args, status, "engine");
   child.on("close", async (code) => {
-    if (code === 0) {
+    if (code === 0 && command !== "export-dashboard") {
       await runExportAfterEngine(currentStatus ?? status);
       return;
     }
@@ -198,10 +198,10 @@ export async function startEngineRun(request: EngineRunRequest): Promise<EngineR
     await writeStatus({
       ...(currentStatus ?? status),
       running: false,
-      phase: "failed",
+      phase: code === 0 ? "success" : "failed",
       finishedAt: new Date().toISOString(),
       exitCode: code,
-      message: "Engine gagal. Cek log terakhir di status.",
+      message: code === 0 ? "Data dashboard sudah diperbarui." : "Engine gagal. Cek log terakhir di status.",
     });
   });
 
